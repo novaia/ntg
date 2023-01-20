@@ -4,11 +4,11 @@ from keras.utils import image_dataset_from_directory
 from keras.callbacks import ReduceLROnPlateau
 from keras.callbacks import ModelCheckpoint
 
-batch_size = 32
+batch_size = 8
 image_size = 360
 channels = 1
 
-data_path = 'data/heightmap_discrimination_dataset'
+data_path = '../../heightmaps/heightmap_discrimination_dataset_2'
 
 def load_dataset(subset):
     dataset = image_dataset_from_directory(directory = data_path,
@@ -17,7 +17,7 @@ def load_dataset(subset):
                                            batch_size = batch_size,
                                            image_size = (image_size, image_size), 
                                            shuffle = True,
-                                           validation_split = 0.2,
+                                           validation_split = 0.15,
                                            subset = subset,
                                            seed = 10)
     return dataset
@@ -56,12 +56,12 @@ def create_model():
     return model
 
 reduce_lr = ReduceLROnPlateau(monitor = 'val_accuracy', factor = 0.3, patience = 2, 
-                              min_delta = 0.001, mode = 'auto', verbose = 1)
+                              min_delta = 0.001, min_lr=0.00001, mode = 'auto', verbose = 1)
 
 model_checkpoint = ModelCheckpoint(monitor = 'val_accuracy', 
                                    save_best_only = True, 
                                    save_freq = 'epoch',
-                                   filepath = 'data/corrupted_heightmap_discriminator.h5')
+                                   filepath = 'data/corrupted_heightmap_discriminator_2.h5')
 
 model = create_model()
 model.fit(training, 
