@@ -3,12 +3,12 @@ import keras
 import cv2
 import numpy as np
 
-input_directory = 'C:/Users/Hayden/Desktop/heightmaps/split_heightmaps/'
-output_directory = 'C:/Users/Hayden/Desktop/heightmaps/uncorrupted_split_heightmaps/'
+input_directory = 'C:/Users/Hayden/Desktop/heightmaps/uncorrupted_split_heightmaps/'
+output_directory = 'C:/Users/Hayden/Desktop/heightmaps/uncorrupted_split_heightmaps_second_pass/'
 batch_size = 32
 image_size = 360
 
-model = keras.models.load_model('data/corrupted_heightmap_discriminator.h5')
+model = keras.models.load_model('data/corrupted_heightmap_discriminator_2.h5')
 
 file_list = os.listdir(input_directory)
 
