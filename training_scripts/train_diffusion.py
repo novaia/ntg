@@ -4,6 +4,7 @@ from keras import layers
 from keras import models
 from keras import activations
 from keras.losses import mean_absolute_error
+from datetime import datetime
 import math
 import numpy as np
 import matplotlib.pyplot as plt
@@ -31,6 +32,7 @@ learning_rate = 1e-3
 weight_decay = 1e-4
 optimizer = Adam(0.0002, 0.5)
 
+# Input.
 batch_size = 8
 image_size = 256
 channels = 1
@@ -38,10 +40,10 @@ channels = 1
 def main():
     idg = ImageDataGenerator(preprocessing_function = preprocessing_function)
     heightmap_iterator = idg.flow_from_directory('../../heightmaps/uncorrupted_split_heightmaps_second_pass', 
-                                             target_size = (image_size, image_size), 
-                                             batch_size = batch_size,
-                                            color_mode = 'grayscale',
-                                             classes = [''])
+                                                 target_size = (image_size, image_size), 
+                                                 batch_size = batch_size,
+                                                 color_mode = 'grayscale',
+                                                 classes = [''])
 
     if starting_epoch == 0:
         model = create_model(image_size, widths, block_depth)
@@ -157,7 +159,6 @@ def reverse_diffusion(model, num_images, diffusion_steps):
         diffusion_times = tf.ones((num_images, 1, 1, 1)) - step * step_size
         noise_rates, signal_rates = diffusion_schedule(diffusion_times)
         
-        #pred_noises = model.predict([noisy_images, noise_rates**2])
         pred_noises = model([noisy_images, noise_rates**2], training = True)
         pred_images = (noisy_images - noise_rates * pred_noises) / signal_rates
         
@@ -184,6 +185,8 @@ def train(directory_iterator, model, epochs):
     steps_per_epoch = directory_iterator.__len__() - 1
     
     for epoch in range(epochs):
+        epoch_start_time = datetime.now()
+
         for step in range(steps_per_epoch):
             images = np.asarray(directory_iterator.next()[0])
             if images.shape[0] != batch_size:
@@ -197,9 +200,15 @@ def train(directory_iterator, model, epochs):
             noisy_images = signal_rates * images + noise_rates * noises
             model.train_on_batch([noisy_images, noise_rates**2], noises)
         
+        epoch_end_time = datetime.now()
+        epoch_delta_time = epoch_end_time - epoch_start_time
+        simple_epoch_end_time = str(epoch_end_time.hour) + ':' + str(epoch_end_time.minute)
+        
         absolute_epoch = starting_epoch + epoch + 1
-        print('Epoch ' + str(absolute_epoch) + ' completed.')
+        
+        print('Epoch ' + str(absolute_epoch) + ' completed at ' + str(simple_epoch_end_time) + ' in ' + str(epoch_delta_time))
         model.save(model_save_path + model_name + '_epoch' + str(absolute_epoch))
+
         generated_images = reverse_diffusion(model, num_images = 7, diffusion_steps = 20)
         save_images(generated_images, rows = 1, columns = 7, epoch = absolute_epoch)
     
