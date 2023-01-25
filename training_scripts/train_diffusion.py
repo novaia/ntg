@@ -38,8 +38,15 @@ image_size = 256
 channels = 1
 
 def main():
+    print(tf.__version__)
+
+    print('1: ', tf.config.list_physical_devices('GPU'))
+    print('2: ', tf.test.is_built_with_cuda)
+    print('3: ', tf.test.gpu_device_name())
+    print('4: ', tf.config.get_visible_devices())
+
     idg = ImageDataGenerator(preprocessing_function = preprocessing_function)
-    heightmap_iterator = idg.flow_from_directory('../../heightmaps/uncorrupted_split_heightmaps_second_pass', 
+    heightmap_iterator = idg.flow_from_directory(data_path, 
                                                  target_size = (image_size, image_size), 
                                                  batch_size = batch_size,
                                                  color_mode = 'grayscale',
@@ -51,7 +58,7 @@ def main():
     else:
         model = models.load_model(model_save_path + model_name + '_epoch' + str(starting_epoch))
 
-    model = train(model, heightmap_iterator)
+    model = train(heightmap_iterator, model, 4)
 
 
 def preprocessing_function(image):
