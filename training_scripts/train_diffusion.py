@@ -10,7 +10,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 import tensorflow as tf
 
-starting_epoch = 47
+starting_epoch = 47 # 0 if training from scratch.
 data_path = '../../heightmaps/uncorrupted_split_heightmaps_second_pass/'
 model_save_path = '../data/models/diffusion_models/'
 model_name = 'diffusion1'
@@ -148,8 +148,9 @@ def diffusion_schedule(diffusion_times):
     return noise_rates, signal_rates
 
 
-def reverse_diffusion(model, num_images, diffusion_steps):
-    initial_noise = tf.random.normal(shape=(num_images, image_size, image_size, channels))
+def reverse_diffusion(model, num_images, diffusion_steps, initial_noise = None):
+    if initial_noise != None:
+        initial_noise = tf.random.normal(shape=(num_images, image_size, image_size, channels))
     step_size = 1.0 / diffusion_steps
     
     next_noisy_images = initial_noise
