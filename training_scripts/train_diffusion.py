@@ -156,7 +156,7 @@ def diffusion_schedule(diffusion_times):
 
 
 def reverse_diffusion(model, num_images, diffusion_steps, initial_noise = None):
-    if initial_noise != None:
+    if initial_noise == None:
         initial_noise = tf.random.normal(shape=(num_images, image_size, image_size, channels))
     step_size = 1.0 / diffusion_steps
     
