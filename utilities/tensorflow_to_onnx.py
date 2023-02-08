@@ -2,7 +2,7 @@ import tensorflow as tf
 import tf2onnx
 
 input_path = "../data/models/diffusion_models/"
-model_name = "diffusion1_epoch62"
+model_name = "diffusion1_epoch104"
 file_type = ''
 output_path = "../data/models/onnx_models/"
 
