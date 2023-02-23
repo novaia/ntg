@@ -1,3 +1,7 @@
+"""
+Training code for the diffusion model Pix.
+"""
+
 from keras.preprocessing.image import ImageDataGenerator
 from keras.optimizers import Adam
 from keras import layers
