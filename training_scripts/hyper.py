@@ -41,30 +41,32 @@ embedding_max_frequency = 1000.0
 diffusion_widths = [32, 64, 96]
 diffusion_block_depth = 2
 
-class LatentGenerator(tf.keras.utils.Sequence):
-    def __init__(self, path, batch_size, shuffle, target_size, channels):
-        self.batch_size = batch_size
-        self.shuffle = shuffle
-        self.path = path
-        self.file_list = os.listdir(path)
-        self.num_files = len(self.file_list)
-        self.target_size = target_size
-        self.channels = channels
-        
-        print('Found ' + str(self.num_files) + ' files.')
-    
-    def on_epoch_end(self):
-        if self.shuffle:
-            self.file_list = random.sample(self.file_list, self.num_files)
-    
-    def __len__(self):
-        return self.num_files // self.batch_size
-    
-    def __getitem__(self, index):
-        arr = np.zeros(shape=(self.batch_size, self.target_size, self.target_size, channels))
-        for i in range(self.batch_size):
-            arr[i] = np.load(self.path + self.file_list[index + i])        
-        return arr
+def preprocessing_function(image):
+        image = image.astype(float) / 255.
+        return image
+
+def main():
+    idg = ImageDataGenerator(preprocessing_function = preprocessing_function)
+    image_iterator = idg.flow_from_directory(
+        image_dataset_path,
+        target_size = (image_size, image_size),
+        batch_size = autoencoder_batch_size,
+        color_mode = color_mode,
+        shuffle = True,
+        classes = ['']
+    )
+
+    vae = VAE(autoencoder_widths, beta_slope, beta_period)
+    vae.compile(optimizer='adam')
+
+    print('Training VAE...')
+    vae.fit(image_iterator, epochs=autoencoder_epochs)
+
+    diffusion_model = DiffusionModel(latent_size, diffusion_block_depth, diffusion_widths)
+    diffusion_model.compile(optimizer='adam')
+
+    print('Training diffusion model...')
+    diffusion_model.fit(image_iterator, epochs=diffusion_epochs)
     
 class BetaScheduler(keras.callbacks.Callback):
     def on_train_batch_end(self, batch, logs=None):
@@ -79,12 +81,6 @@ class BetaScheduler(keras.callbacks.Callback):
         self.model.beta_history.append(self.model.beta.numpy())
         self.model.beta_schedule_step += 1
         return
-    
-class Sampling(layers.Layer):
-    def call(self, inputs):
-        z_mean, z_log_var = inputs
-        epsilon = tf.keras.backend.random_normal(shape=(z_mean.shape[1], z_mean.shape[2], channels))
-        return z_mean + tf.exp(0.5 * z_log_var) * epsilon
 
 class VAE(keras.Model):
     def __init__(self, widths, beta_slope, beta_period, encoder=None, decoder=None):
@@ -122,6 +118,12 @@ class VAE(keras.Model):
             self.kl_loss_tracker,
         ]
     
+    class Sampling(layers.Layer):
+        def call(self, inputs):
+            z_mean, z_log_var = inputs
+            epsilon = tf.keras.backend.random_normal(shape=(z_mean.shape[1], z_mean.shape[2], channels))
+            return z_mean + tf.exp(0.5 * z_log_var) * epsilon
+
     def create_encoder(self):
         input_image = layers.Input(shape=(image_size, image_size, channels))
         x = input_image
@@ -141,7 +143,7 @@ class VAE(keras.Model):
 
         z_mean = layers.Conv2D(channels, (2, 2), padding='same')(x)
         z_log_var = layers.Conv2D(channels, (2, 2), padding='same')(x)
-        z = Sampling()([z_mean, z_log_var])
+        z = self.Sampling()([z_mean, z_log_var])
         return keras.Model(input_image, [z_mean, z_log_var, z])
     
     def create_decoder(self):
@@ -171,19 +173,15 @@ class VAE(keras.Model):
             z_mean, z_log_var, z = self.encoder(data)
             reconstruction = self.decoder(z)
             
-            # loss.
-            reconstruction_loss = tf.reduce_mean(
-                tf.reduce_sum(
-                    keras.losses.mean_squared_error(data, reconstruction), axis=(1, 2)
-                )
-            )
-                
+            # Loss.
+            reconstruction_loss = self.compiled_loss(data, reconstruction)                
             kl_loss = -self.beta * (1 + z_log_var - tf.square(z_mean) - tf.exp(z_log_var))
             kl_loss = tf.reduce_mean(tf.reduce_sum(kl_loss, axis=1))
             total_loss = reconstruction_loss + kl_loss
             
-        grads = tape.gradient(total_loss, self.trainable_weights)
-        self.optimizer.apply_gradients(zip(grads, self.trainable_weights))
+            # Backprop.
+            grads = tape.gradient(total_loss, self.trainable_weights)
+            self.optimizer.apply_gradients(zip(grads, self.trainable_weights))
 
         self.total_loss_tracker.update_state(total_loss)
         self.reconstruction_loss_tracker.update_state(reconstruction_loss)
@@ -203,74 +201,74 @@ class VAE(keras.Model):
         x = self.decoder(data, training=False)
         return x
 
-def sinusoidal_embedding(x):
-    embedding_min_frequency = 1.0
-    frequencies = tf.exp(
-        tf.linspace(
-            tf.math.log(embedding_min_frequency),
-            tf.math.log(embedding_max_frequency),
-            embedding_dims // 2,
-        )
-    )
-    angular_speeds = 2.0 * math.pi * frequencies
-    #angular_speeds = tf.cast(angular_speeds, tf.float16)
-    embeddings = tf.concat(
-        [tf.sin(angular_speeds * x), tf.cos(angular_speeds * x)], axis=3
-    )
-    return embeddings
-
-def ResidualBlock(width):
-    def apply(x):
-        input_width = x.shape[3]
-        if input_width == width:
-            residual = x
-        else:
-            residual = layers.Conv2D(width, kernel_size=1)(x)
-        x = layers.BatchNormalization(center=False, scale=False)(x)
-        x = layers.Conv2D(
-            width, kernel_size=3, padding="same", activation=keras.activations.swish
-        )(x)
-        x = layers.Conv2D(width, kernel_size=3, padding="same")(x)
-        x = layers.Add()([x, residual])
-        return x
-
-    return apply
-
-def DownBlock(width, block_depth):
-    def apply(x):
-        x, skips = x
-        for _ in range(block_depth):
-            x = ResidualBlock(width)(x)
-            skips.append(x)
-        x = layers.AveragePooling2D(pool_size=2)(x)
-        return x
-
-    return apply
-
-def UpBlock(width, block_depth):
-    def apply(x):
-        x, skips = x
-        x = layers.UpSampling2D(size=2, interpolation="bilinear")(x)
-        for _ in range(block_depth):
-            x = layers.Concatenate()([x, skips.pop()])
-            x = ResidualBlock(width)(x)
-        return x
-
-    return apply
-
 class DiffusionModel(keras.Model):
-    def __init__(self, input_size, block_depth, widths):
+    def __init__(self, input_size, block_depth, widths, encoder):
         super().__init__()
         
         self.normalizer = layers.Normalization()
         self.model = self.create_model(input_size, widths, block_depth)
         self.input_size = input_size
+        self.encoder = encoder
     
+    def sinusoidal_embedding(self, x):
+        embedding_min_frequency = 1.0
+        frequencies = tf.exp(
+            tf.linspace(
+                tf.math.log(embedding_min_frequency),
+                tf.math.log(embedding_max_frequency),
+                embedding_dims // 2,
+            )
+        )
+        angular_speeds = 2.0 * math.pi * frequencies
+        embeddings = tf.concat(
+            [tf.sin(angular_speeds * x), tf.cos(angular_speeds * x)], axis=3
+        )
+        return embeddings
+    
+    def ResidualBlock(self, width):
+        def apply(x):
+            input_width = x.shape[3]
+            if input_width == width:
+                residual = x
+            else:
+                residual = layers.Conv2D(width, kernel_size=1)(x)
+            x = layers.BatchNormalization(center=False, scale=False)(x)
+            x = layers.Conv2D(
+                width, kernel_size=3, padding="same", activation=keras.activations.swish
+            )(x)
+            x = layers.Conv2D(width, kernel_size=3, padding="same")(x)
+            x = layers.Add()([x, residual])
+            return x
+
+        return apply
+
+    def DownBlock(self, width, block_depth):
+        def apply(x):
+            x, skips = x
+            for _ in range(block_depth):
+                x = self.ResidualBlock(width)(x)
+                skips.append(x)
+            x = layers.AveragePooling2D(pool_size=2)(x)
+            return x
+
+        return apply
+
+    def UpBlock(self, width, block_depth):
+        def apply(x):
+            x, skips = x
+            x = layers.UpSampling2D(size=2, interpolation="bilinear")(x)
+            for _ in range(block_depth):
+                x = layers.Concatenate()([x, skips.pop()])
+                x = self.ResidualBlock(width)(x)
+            return x
+
+        return apply
+
     def create_model(self, input_size, widths, block_depth):
         noisy_input = keras.Input(shape=(input_size, input_size, channels))
         noise_variances = keras.Input(shape=(1, 1, 1))
         
-        e = layers.Lambda(sinusoidal_embedding)(noise_variances)
+        e = layers.Lambda(self.sinusoidal_embedding)(noise_variances)
         e = layers.UpSampling2D(size=input_size, interpolation='nearest')(e)
         
         x = layers.Conv2D(widths[0], kernel_size=1)(noisy_input)
@@ -278,13 +276,13 @@ class DiffusionModel(keras.Model):
         
         skips = []
         for width in widths[:-1]:
-            x = DownBlock(width, block_depth)([x, skips])
+            x = self.DownBlock(width, block_depth)([x, skips])
             
         for _ in range(block_depth):
-            x = ResidualBlock(widths[-1])(x)
+            x = self.ResidualBlock(widths[-1])(x)
         
         for width in reversed(widths[:-1]):
-            x = UpBlock(width, block_depth)([x, skips])
+            x = self.UpBlock(width, block_depth)([x, skips])
             
         x = layers.Conv2D(channels, kernel_size=1, kernel_initializer='zeros')(x)
         
@@ -346,7 +344,8 @@ class DiffusionModel(keras.Model):
         generated_images = self.reverse_diffusion(initial_noise, diffusion_steps)
         return generated_images
     
-    def train_step(self, images):        
+    def train_step(self, images):
+        latents = self.encoder(images, training=False)       
         noises = tf.random.normal(shape=(diffusion_batch_size, self.input_size, self.input_size, channels))
         
         diffusion_times = tf.random.uniform(
@@ -354,29 +353,23 @@ class DiffusionModel(keras.Model):
         )
         
         noise_rates, signal_rates = self.diffusion_schedule(diffusion_times)
-        noisy_images = signal_rates * images + noise_rates * noises
+        noisy_images = signal_rates * latents + noise_rates * noises
         
         with tf.GradientTape() as tape:
             pred_noises, pred_images = self.denoise(
                 noisy_images, noise_rates, signal_rates, training=True
             )
             
-            noise_loss = tf.reduce_mean(
-                tf.reduce_sum(
-                    keras.losses.mean_squared_error(noises, pred_noises), axis=(1, 2)
-                )
-            )
+            noise_loss = self.compiled_loss(noises, pred_noises)
+            image_loss = self.compiled_loss(images, pred_images)
             
-            image_loss = tf.reduce_mean(
-                tf.reduce_sum(
-                    keras.losses.mean_squared_error(images, pred_images), axis=(1, 2)
-                )
-            )
-            
-        grads = tape.gradient(noise_loss, self.model.trainable_weights)
-        self.optimizer.apply_gradients(zip(grads, self.model.trainable_weights))
+            grads = tape.gradient(noise_loss, self.model.trainable_weights)
+            self.optimizer.apply_gradients(zip(grads, self.model.trainable_weights))
 
         self.noise_loss_tracker.update_state(noise_loss)
         self.image_loss_tracker.update_state(image_loss)
             
         return {m.name: m.result() for m in self.metrics}
+    
+if __name__ == '__main__':
+    main()
