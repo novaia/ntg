@@ -9,8 +9,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import math
 from keras.preprocessing.image import ImageDataGenerator
-import os
-import random
+import argparse
 
 # Data.
 image_size = 128
@@ -30,6 +29,7 @@ beta_slope = 0.0002
 beta_period = 10000
 max_beta = 1.0
 min_beta = 0.0
+autoencoder_name = 'autoencoder'
 
 # Diffusion.
 diffusion_batch_size = 1024
@@ -41,9 +41,11 @@ embedding_max_frequency = 1000.0
 diffusion_widths = [32, 64, 96]
 diffusion_block_depth = 2
 
-def preprocessing_function(image):
-        image = image.astype(float) / 255.
-        return image
+# Script arguments.
+parser = argparse.ArgumentParser()
+parser.add_argument('--vae')
+parser.add_argument('--dm')
+args = vars(parser.parse_args())
 
 def main():
     idg = ImageDataGenerator(preprocessing_function = preprocessing_function)
@@ -56,17 +58,27 @@ def main():
         classes = ['']
     )
 
-    vae = VAE(autoencoder_widths, beta_slope, beta_period)
-    vae.compile(optimizer='adam')
+    if(args['vae']):
+        # Create VAE.
+        vae = VAE(autoencoder_widths, beta_slope, beta_period)
+        vae.compile(optimizer='adam', loss='mean_squared_error')
 
-    print('Training VAE...')
-    vae.fit(image_iterator, epochs=autoencoder_epochs)
+        print('Training VAE...')
+        vae.fit(image_iterator, epochs=autoencoder_epochs, callbacks=[BetaScheduler()])
+    else:
+        # Load VAE.
+        vae - keras.models.load_model('../data/' + autoencoder_name)
 
-    diffusion_model = DiffusionModel(latent_size, diffusion_block_depth, diffusion_widths)
-    diffusion_model.compile(optimizer='adam')
+    if(args['dm']):
+        diffusion_model = DiffusionModel(latent_size, diffusion_block_depth, diffusion_widths, vae)
+        diffusion_model.compile(optimizer='adam', loss='mean_squared_error')
 
-    print('Training diffusion model...')
-    diffusion_model.fit(image_iterator, epochs=diffusion_epochs)
+        print('Training diffusion model...')
+        diffusion_model.fit(image_iterator, epochs=diffusion_epochs)
+
+def preprocessing_function(image):
+        image = image.astype(float) / 255.
+        return image
     
 class BetaScheduler(keras.callbacks.Callback):
     def on_train_batch_end(self, batch, logs=None):
@@ -202,13 +214,13 @@ class VAE(keras.Model):
         return x
 
 class DiffusionModel(keras.Model):
-    def __init__(self, input_size, block_depth, widths, encoder):
+    def __init__(self, input_size, block_depth, widths, autoencoder):
         super().__init__()
         
         self.normalizer = layers.Normalization()
         self.model = self.create_model(input_size, widths, block_depth)
         self.input_size = input_size
-        self.encoder = encoder
+        self.autoencoder = autoencoder
     
     def sinusoidal_embedding(self, x):
         embedding_min_frequency = 1.0
@@ -345,7 +357,7 @@ class DiffusionModel(keras.Model):
         return generated_images
     
     def train_step(self, images):
-        latents = self.encoder(images, training=False)       
+        latents = self.autoencoder.encode(images, training=False)       
         noises = tf.random.normal(shape=(diffusion_batch_size, self.input_size, self.input_size, channels))
         
         diffusion_times = tf.random.uniform(
