@@ -27,3 +27,15 @@ This folder contains scripts required to create datasets for NTG. This file serv
 ### blur_images
 
 - Blurs images to create input for style transfer. Style transfer was never implemented so this was never used.
+
+## Datasets
+
+### SRTM 1 arc-second
+
+- This is the base dataset scraped from [Earth Explorer]('https://earthexplorer.usgs.gov/'). It contains approximately 15k highresolution GEOTIFF heightmaps.
+- To "recreate", simply run ``scrape_earthexplorer.py``.
+
+### SRTM 1 arc-second PNG
+
+- SRTM 1 arc-second dataset converted into PNGs.
+- Use ``geotiff_to_png.py`` on SRTM 1 arc-second to recreate.
