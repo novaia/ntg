@@ -1,6 +1,8 @@
 # Neural Terrain Generation
 Neural Terrain Generation (NTG) is a collection of generative neural networks that output heightmaps for 3D terrain. This repository contains code for the entire NTG training pipeline.
 
+[NTG Unity Trailer](https://youtu.be/MZakPuXyquk)
+
 <img src="./images/display_heightmaps.png" width="800px"></img>
 
 ## Setup
