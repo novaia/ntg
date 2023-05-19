@@ -1,10 +1,10 @@
 services:
-  ntg-legacy:
+  ntg:
     build: .
     ports:
       - 8888:8888
     volumes:
-      - ../.:/project
+      - .:/project
     deploy:
       resources:
         reservations:
