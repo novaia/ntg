@@ -1,4 +1,5 @@
 jupyterlab
 selenium
 split_image
+tf2onnx
 opencv-python
