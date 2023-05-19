@@ -9,7 +9,7 @@ import os
 blend_file = os.path.join(os.path.dirname(bpy.data.filepath), 'example.blend')
 
 # Define the path of the script to execute
-script_file = os.path.join(os.path.dirname(bpy.data.filepath), 'bake_export.py')
+script_file = os.path.join(os.path.dirname(bpy.data.filepath), 'bake_texture_maps_internal.py')
 
 # Define a function that executes the script after opening the blend file
 def execute_script(scene):
