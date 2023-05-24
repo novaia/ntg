@@ -8,6 +8,9 @@ Neural Terrain Generation (NTG) is a collection of generative neural networks th
 ## Setup
 After cloning, create a directory at the root of the repository called ``data``.
 
+## Legacy Code
+ The ``legacy`` directory contains all the NTG code that was originally implemented in Tensorflow. This code is no longer maintained, but is kept here for reference. In order to run it, use the Docker environment described by the ``legacy/Dockerfile`` and ``legacy/docker-compose.yaml`` files.
+
 ## Docker Environment
 
 Building image:
