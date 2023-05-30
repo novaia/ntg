@@ -19,7 +19,7 @@ class ResidualBlock(nn.Module):
 
     @nn.compact
     def __call__(self, x):
-        input_width = x.shape[3]
+        input_width = x.shape[-1]
         if input_width == self.width:
             residual = x
         else:
@@ -72,7 +72,7 @@ def sinusoidal_embedding(x):
     angular_speeds = 2.0 * math.pi * frequencies
     embeddings = jnp.concatenate(
         [jnp.sin(angular_speeds * x), jnp.cos(angular_speeds * x)],
-        axis = 3
+        axis = 2
     )
     return embeddings
 
@@ -92,7 +92,7 @@ class DDIM(nn.Module):
         )
         
         x = nn.Conv(self.widths[0], kernel_size=(1, 1))(x)
-        x = jnp.concatenate([x, e])
+        x = jnp.concatenate([x, e], axis=-1)
 
         skips = []
         for width in self.widths[:-1]:
@@ -104,9 +104,12 @@ class DDIM(nn.Module):
         for width in reversed(self.widths[:-1]):
             x = UpBlock(width, self.block_depth)([x, skips])
 
-        x = nn.Conv(
-            channels, 
-            kernel_size=(1, 1), 
-            kernel_init=nn.initializers.zeros_init()
-        )(x)
+        x = nn.Conv(channels, kernel_size=(1, 1), kernel_init=nn.initializers.zeros_init())(x)
         return x
+    
+key1, key2, key3 = jax.random.split(jax.random.PRNGKey(0), 3)
+x = jax.random.uniform(key1, (28, 28, 1))
+noise_variances = jax.random.uniform(key2, (1, 1, 1))
+
+model = DDIM(widths, block_depth)
+params = model.init(key2, (x, noise_variances))
