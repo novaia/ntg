@@ -1,5 +1,5 @@
 """
-Training code for the latent diffusion model Hyper.
+Training code for the latent diffusion model Hyper. It doesn't work.
 """
 
 import tensorflow as tf
