@@ -38,12 +38,11 @@ class DownBlock(nn.Module):
     @nn.compact
     def __call__(self, x, train: bool):
         x, skips = x
-        print("x pre down", x.shape)
+
         for _ in range(self.block_depth):
             x = ResidualBlock(self.width)(x, train)
             skips.append(x)
         x = nn.avg_pool(x, window_shape=(2, 2), strides=(2, 2))
-        print("x post down", x.shape)
         return x
 
 class UpBlock(nn.Module):
@@ -54,19 +53,12 @@ class UpBlock(nn.Module):
     def __call__(self, x, train: bool):
         x, skips = x
 
-        print("x pre up", x.shape)
-
         upsample_shape = (x.shape[0] * 2, x.shape[1] * 2, x.shape[2])
         x = jax.image.resize(x, upsample_shape, method='bilinear')
-
-        print("x post up", x.shape)
-        print("skip", skips[-1].shape)
 
         for _ in range(self.block_depth):
             x = jnp.concatenate([x, skips.pop()], axis=-1)
             x = ResidualBlock(self.width)(x, train)
-            print("x post res", x.shape)
-            print("x post concat", x.shape)
         return x
 
 def sinusoidal_embedding(x):
