@@ -18,13 +18,13 @@ class ResidualBlock(nn.Module):
     width: int
 
     @nn.compact
-    def __call__(self, x):
+    def __call__(self, x, train: bool):
         input_width = x.shape[-1]
         if input_width == self.width:
             residual = x
         else:
             residual = nn.Conv(self.width, kernel_size=(1, 1))(x)
-        x = nn.BatchNorm()(x)
+        x = nn.BatchNorm(use_running_average=not train)(x)
         x = nn.Conv(self.width, kernel_size=(3, 3))(x)
         x = nn.activation.swish(x)
         x = nn.Conv(self.width, kernel_size=(3, 3))(x)
@@ -36,12 +36,14 @@ class DownBlock(nn.Module):
     block_depth: int
 
     @nn.compact
-    def __call__(self, x):
+    def __call__(self, x, train: bool):
         x, skips = x
+        print("x pre down", x.shape)
         for _ in range(self.block_depth):
-            x = ResidualBlock(self.width)(x)
+            x = ResidualBlock(self.width)(x, train)
             skips.append(x)
-        x = nn.avg_pool(x, window_shape=(2, 2))
+        x = nn.avg_pool(x, window_shape=(2, 2), strides=(2, 2))
+        print("x post down", x.shape)
         return x
 
 class UpBlock(nn.Module):
@@ -49,16 +51,23 @@ class UpBlock(nn.Module):
     block_depth: int
 
     @nn.compact
-    def __call__(self, x):
+    def __call__(self, x, train: bool):
         x, skips = x
-        x = jax.image.resize(
-            x, 
-            shape=(x.shape[0], x.shape[1] * 2, x.shape[2] * 2, x.shape[3]),
-            method='bilinear'
-        )
+
+        print("x pre up", x.shape)
+
+        upsample_shape = (x.shape[0] * 2, x.shape[1] * 2, x.shape[2])
+        x = jax.image.resize(x, upsample_shape, method='bilinear')
+
+        print("x post up", x.shape)
+        print("skip", skips[-1].shape)
+
         for _ in range(self.block_depth):
-            x = jnp.concatenate([x, skips.pop()])
-            x = ResidualBlock(self.width)(x)
+            x = jnp.concatenate([x, skips.pop()], axis=-1)
+            x = ResidualBlock(self.width)(x, train)
+            print("x post res", x.shape)
+            print("x post concat", x.shape)
+        return x
 
 def sinusoidal_embedding(x):
     embedding_min_frequency = 1.0
@@ -81,28 +90,24 @@ class DDIM(nn.Module):
     block_depth: int
 
     @nn.compact
-    def __call__(self, x):
+    def __call__(self, x, train: bool):
         x, noise_variances = x
 
         e = sinusoidal_embedding(noise_variances)
-        e = jax.image.resize(
-            e, 
-            shape=x.shape,
-            method='nearest'
-        )
+        e = jax.image.resize(e, shape=x.shape, method='nearest')
         
         x = nn.Conv(self.widths[0], kernel_size=(1, 1))(x)
         x = jnp.concatenate([x, e], axis=-1)
 
         skips = []
         for width in self.widths[:-1]:
-            x = DownBlock(width, self.block_depth)([x, skips])
+            x = DownBlock(width, self.block_depth)([x, skips], train)
 
         for _ in range(self.block_depth):
-            x = ResidualBlock(self.widths[-1])(x)
+            x = ResidualBlock(self.widths[-1])(x, train)
 
         for width in reversed(self.widths[:-1]):
-            x = UpBlock(width, self.block_depth)([x, skips])
+            x = UpBlock(width, self.block_depth)([x, skips], train)
 
         x = nn.Conv(channels, kernel_size=(1, 1), kernel_init=nn.initializers.zeros_init())(x)
         return x
