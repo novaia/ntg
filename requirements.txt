@@ -2,3 +2,5 @@ jupyterlab
 selenium
 split_image
 opencv-python
+jax
+flax

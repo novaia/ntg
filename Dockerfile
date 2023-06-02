@@ -1,4 +1,4 @@
-FROM pytorch/pytorch:latest
+FROM tensorflow/tensorflow:latest-gpu
 
 WORKDIR /project
 COPY requirements.txt requirements.txt
