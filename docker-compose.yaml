@@ -5,6 +5,7 @@ services:
       - 8888:8888
     volumes:
       - .:/project
+      - ../heightmaps/uncorrupted_split_heightmaps_second_pass:/heightmaps
     deploy:
       resources:
         reservations:
