@@ -11,8 +11,10 @@ from flax.training import train_state
 from typing import Any
 from keras.preprocessing.image import ImageDataGenerator
 from datetime import datetime
+import os
 
-data_path = '../../heightmaps/uncorrupted_split_heightmaps_second_pass/'
+#data_path = '../../heightmaps/uncorrupted_split_heightmaps_second_pass/'
+data_path = '../../heightmaps/'
 model_save_path = '../data/models/diffusion_models/'
 model_name = 'diffusion1'
 image_save_path = '../data/images/'
@@ -34,7 +36,8 @@ weight_decay = 1e-4
 
 # Input.
 batch_size = 8
-image_width, image_height = 256
+image_width = 256
+image_height = 256
 channels = 1
 
 def preprocessing_function(image):
@@ -105,7 +108,7 @@ class UpBlock(nn.Module):
         return x
 
 class DDIM(nn.Module):
-    widths: list[int]
+    widths: list
     block_depth: int
 
     @nn.compact
@@ -183,7 +186,8 @@ def train_step(state, images, parent_key):
     return state
 
 if __name__ == '__main__':
-    print('GPU:', jax.devices()['gpu'])
+    #print('GPU:', jax.devices('gpu'))
+    print(jax.devices())
 
     init_rng = jax.random.PRNGKey(0)
     model = DDIM(widths, block_depth)
@@ -207,7 +211,7 @@ if __name__ == '__main__':
 
         for step in range(steps_per_epoch):
             images = jnp.asarray(heightmap_iterator.next())[0]
-            jax.device_put(images, 'gpu')
+            #jax.device_put(images, 'gpu')
             
             if images.shape[0] != batch_size:
                 continue
