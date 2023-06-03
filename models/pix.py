@@ -135,8 +135,8 @@ class DDIM(nn.Module):
         return x
     
 def diffusion_schedule(diffusion_times):
-    start_angle = jnp.arcos(max_signal_rate)
-    end_angle = jnp.arcos(min_signal_rate)
+    start_angle = jnp.arccos(max_signal_rate)
+    end_angle = jnp.arccos(min_signal_rate)
 
     diffusion_angles = start_angle + diffusion_times * (end_angle - start_angle)
 
@@ -159,7 +159,7 @@ def create_train_state(module, rng, learning_rate):
 
 @jax.jit
 def train_step(state, images, parent_key):
-    noise_key, diffusion_time_key = jax.random.PRNGKey(parent_key, 2)
+    noise_key, diffusion_time_key = jax.random.split(parent_key, 2)
     batch_size = len(images)
     
     def loss_fn(params):
@@ -179,14 +179,14 @@ def train_step(state, images, parent_key):
         loss = jnp.mean((pred_noises - noises)**2)
         return loss, updates
 
-    grad_fn = jax.value_and_grad(loss_fn)
+    grad_fn = jax.value_and_grad(loss_fn, has_aux=True)
     (loss, updates), grads = grad_fn(state.params)
     state = state.apply_gradients(grads=grads)
     state = state.replace(batch_stats=updates['batch_stats'])
     return state
 
 if __name__ == '__main__':
-    #print('GPU:', jax.devices('gpu'))
+    print('GPU:', jax.devices('gpu'))
     print(jax.devices())
 
     init_rng = jax.random.PRNGKey(0)
@@ -203,20 +203,25 @@ if __name__ == '__main__':
         classes = ['']
     )
 
-    epochs = 1
+    epochs = 3
 
     steps_per_epoch = len(heightmap_iterator)
     for epoch in range(epochs):
         epoch_start_time = datetime.now()
 
         for step in range(steps_per_epoch):
-            images = jnp.asarray(heightmap_iterator.next())[0]
+            step_start_time = datetime.now()
+            #print('step', step)
+            images = jnp.asarray(heightmap_iterator.next()[0])
             #jax.device_put(images, 'gpu')
             
             if images.shape[0] != batch_size:
                 continue
-
-            state = train_step(state, images, epoch * steps_per_epoch + step)
+            
+            train_step_key = jax.random.PRNGKey(epoch * steps_per_epoch + step)
+            state = train_step(state, images, train_step_key)
+            step_end_time = datetime.now()
+            #print('step completed in', str(step_end_time - step_start_time))
         
         epoch_end_time = datetime.now()
         epoch_delta_time = epoch_end_time - epoch_start_time
