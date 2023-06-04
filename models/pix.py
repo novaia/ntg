@@ -197,6 +197,8 @@ if __name__ == '__main__':
 
     if starting_epoch != 0:
         # TODO: load model checkpoint.
+        #target = {'model': empty_state}
+        #state = checkpointer.restore('./cnn_epoch9', item=target)
         pass
 
     idg = ImageDataGenerator(preprocessing_function = preprocessing_function)
@@ -243,4 +245,3 @@ if __name__ == '__main__':
         absolute_epoch = starting_epoch + epoch + 1
         save_name = model_save_path + model_name + '_epoch' + str(absolute_epoch)
         checkpointer.save(save_name, state)
-        
