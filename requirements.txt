@@ -5,3 +5,4 @@ opencv-python
 flax
 keras
 tensorflow
+orbax

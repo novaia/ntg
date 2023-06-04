@@ -4,6 +4,7 @@ WIP.
 
 import flax.linen as nn
 import optax
+import orbax.checkpoint
 import jax
 import jax.numpy as jnp
 import math
@@ -13,7 +14,7 @@ from keras.preprocessing.image import ImageDataGenerator
 from datetime import datetime
 import os
 
-#data_path = '../../heightmaps/uncorrupted_split_heightmaps_second_pass/'
+starting_epoch = 0 # 0 if training from scratch.
 data_path = '../../heightmaps/'
 model_save_path = '../data/models/diffusion_models/'
 model_name = 'diffusion1'
@@ -194,6 +195,10 @@ if __name__ == '__main__':
     state = create_train_state(model, init_rng, learning_rate)
     del init_rng
 
+    if starting_epoch != 0:
+        # TODO: load model checkpoint.
+        pass
+
     idg = ImageDataGenerator(preprocessing_function = preprocessing_function)
     heightmap_iterator = idg.flow_from_directory(
         data_path, 
@@ -204,14 +209,14 @@ if __name__ == '__main__':
     )
 
     epochs = 3
-
+    checkpointer = orbax.checkpoint.PyTreeCheckpointer()
     steps_per_epoch = len(heightmap_iterator)
+
     for epoch in range(epochs):
         epoch_start_time = datetime.now()
 
         for step in range(steps_per_epoch):
             step_start_time = datetime.now()
-            #print('step', step)
             images = jnp.asarray(heightmap_iterator.next()[0])
             #jax.device_put(images, 'gpu')
             
@@ -221,7 +226,6 @@ if __name__ == '__main__':
             train_step_key = jax.random.PRNGKey(epoch * steps_per_epoch + step)
             state = train_step(state, images, train_step_key)
             step_end_time = datetime.now()
-            #print('step completed in', str(step_end_time - step_start_time))
         
         epoch_end_time = datetime.now()
         epoch_delta_time = epoch_end_time - epoch_start_time
@@ -235,4 +239,8 @@ if __name__ == '__main__':
             'in', 
             str(epoch_delta_time)
         )
+
+        absolute_epoch = starting_epoch + epoch + 1
+        save_name = model_save_path + model_name + '_epoch' + str(absolute_epoch)
+        checkpointer.save(save_name, state)
         
