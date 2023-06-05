@@ -6,6 +6,7 @@ import flax.linen as nn
 import jax
 import jax.numpy as jnp
 import optax
+from jax import lax
 
 # Translated from Keras docs: https://keras.io/examples/generative/vq_vae/
 class VectorQuantize(nn.Module):
@@ -39,13 +40,62 @@ class VectorQuantize(nn.Module):
         quantized = jnp.matmul(encodings, embeddings.T)
         quantized = jnp.reshape(quantized, input_shape)
 
-        # TODO: look into stop gradient
-        # commitment_loss = jnp.mean((jnp.stop_gradient(quantized) - x) ** 2)
-        # codebook_loss = jnp.mean((quantized - jnp.stop_gradient(x)) ** 2)
-        commitment_loss = jnp.mean((quantized - x) ** 2)
-        codebook_loss = jnp.mean((quantized - x) ** 2)
+        commitment_loss = jnp.mean((lax.stop_gradient(quantized) - x) ** 2)
+        codebook_loss = jnp.mean((quantized - lax.stop_gradient(x)) ** 2)
         loss = self.beta * commitment_loss + codebook_loss
 
         # Straight-through estimator.
-        # quantized = x + jnp.stop_gradient(quantized - x)
+        quantized = x + lax.stop_gradient(quantized - x)
         return quantized, loss
+
+# Reference: https://github.com/CompVis/latent-diffusion/blob/main/ldm/modules/diffusionmodules/model.py
+class Encoder(nn.Module):
+    channels: int
+    z_channels: int
+    embed_dim: int
+
+    @nn.compact
+    def __call__(self, x):
+        # conv in
+        x = nn.Conv(self.channels, kernel_size=(3, 3))(x)
+
+        # downsampling
+        
+
+        # conv out
+        x = nn.Conv(self.z_channels, kernel_size=(3, 3))(x)
+
+        x = nn.Conv(self.z_channels, self.embed_dim, 1)(x)
+    
+class Decoder(nn.Module):
+    z_channels: int
+    embed_dim: int
+
+    @nn.compact
+    def __call__(self, x):
+        x, quant_loss = VectorQuantize(self.embed_dim, self.z_channels, beta=0.25)(x)
+        x = nn.Conv(self.embed_dim, self.z_channels, 1)(x)
+        return x, quant_loss
+
+class VQGAN(nn.Module):
+    z_channels: int
+    embed_dim: int
+
+    def setup(self):    
+        self.encoder = Encoder()
+        self.decoder = Decoder()
+        self.quant_conv = nn.Conv(self.z_channels, self.embed_dim, 1)
+        self.quantize = VectorQuantize(self.embed_dim, self.z_channels, beta=0.25)
+
+    def encode(self, x):
+        h = self.encoder(x)
+        h = self.quant_conv(h)
+        quantized, quantized_loss = self.quantize(h)
+        return quantized, quantized_loss
+    
+    def encode_to_prequnt(self, x):
+        h = self.encoder(x)
+        h = self.quant_conv(h)
+        return h
+    
+    def decode():
