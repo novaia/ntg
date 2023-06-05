@@ -1,5 +1,6 @@
 '''
-WIP.
+This is the model and training code for
+Pix: a denoising diffusion implicit model (DDIM).
 '''
 
 import flax.linen as nn
