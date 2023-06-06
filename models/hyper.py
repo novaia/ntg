@@ -48,11 +48,34 @@ class VectorQuantize(nn.Module):
         quantized = x + lax.stop_gradient(quantized - x)
         return quantized, loss
 
+class ResidualBlock(nn.Module):
+    width: int
+
+    @nn.compact
+    def __call__(self, x):
+        return x
+
+class DownBlock(nn.Module):
+    width: int
+    block_depth: int
+
+    @nn.compact
+    def __call__(self, x):
+        for _ in range(self.block_depth):
+            x = ResidualBlock(self.width)(x)
+            # add attention here
+        x = nn.avg_pool(x, window_shape=(2, 2), strides=(2, 2))
+
+        return x
+
+
 # Reference: https://github.com/CompVis/latent-diffusion/blob/main/ldm/modules/diffusionmodules/model.py
 class Encoder(nn.Module):
     channels: int
     z_channels: int
     embed_dim: int
+    widths: list[int]
+    block_depth: int
 
     @nn.compact
     def __call__(self, x):
@@ -60,11 +83,18 @@ class Encoder(nn.Module):
         x = nn.Conv(self.channels, kernel_size=(3, 3))(x)
 
         # downsampling
-        
+        for width in self.widths:
+            x = DownBlock(width, self.block_depth)(x)
+
+        # middle
+        x = ResidualBlock(self.widths[-1])(x)
+        # attention here
+        x = ResidualBlock(self.widths[-1])(x)
 
         # conv out
         x = nn.Conv(self.z_channels, kernel_size=(3, 3))(x)
 
+        # quant conv
         x = nn.Conv(self.z_channels, self.embed_dim, 1)(x)
     
 class Decoder(nn.Module):
@@ -93,9 +123,7 @@ class VQGAN(nn.Module):
         quantized, quantized_loss = self.quantize(h)
         return quantized, quantized_loss
     
-    def encode_to_prequnt(self, x):
+    def encode_to_prequant(self, x):
         h = self.encoder(x)
         h = self.quant_conv(h)
         return h
-    
-    def decode():
