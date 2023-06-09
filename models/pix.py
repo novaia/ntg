@@ -18,7 +18,7 @@ import os
 starting_epoch = 0 # 0 if training from scratch.
 data_path = '../../heightmaps/'
 model_save_path = '../data/models/diffusion_models/'
-model_name = 'diffusion1'
+model_name = 'pix'
 image_save_path = '../data/images/'
 
 # Sampling.
@@ -196,11 +196,10 @@ if __name__ == '__main__':
     state = create_train_state(model, init_rng, learning_rate)
     del init_rng
 
+    checkpointer = orbax.checkpoint.PyTreeCheckpointer()
     if starting_epoch != 0:
-        # TODO: load model checkpoint.
-        #target = {'model': empty_state}
-        #state = checkpointer.restore('./cnn_epoch9', item=target)
-        pass
+        checkpoint_path = model_save_path + model_name + '_epoch' + str(starting_epoch - 1)
+        state = checkpointer.restore(checkpoint_path, state)
 
     idg = ImageDataGenerator(preprocessing_function = preprocessing_function)
     heightmap_iterator = idg.flow_from_directory(
@@ -212,7 +211,6 @@ if __name__ == '__main__':
     )
 
     epochs = 3
-    checkpointer = orbax.checkpoint.PyTreeCheckpointer()
     steps_per_epoch = len(heightmap_iterator)
 
     for epoch in range(epochs):
@@ -233,16 +231,16 @@ if __name__ == '__main__':
         epoch_end_time = datetime.now()
         epoch_delta_time = epoch_end_time - epoch_start_time
         simple_epoch_end_time = str(epoch_end_time.hour) + ':' + str(epoch_end_time.minute)
+        absolute_epoch = starting_epoch + epoch
 
         print(
             'Epoch', 
-            epoch, 
+            absolute_epoch, 
             'completed at', 
             simple_epoch_end_time, 
             'in', 
             str(epoch_delta_time)
         )
 
-        absolute_epoch = starting_epoch + epoch + 1
-        save_name = model_save_path + model_name + '_epoch' + str(absolute_epoch)
+        save_name = model_save_path + model_name + '_epoch' + str(absolute_epoch+1)
         checkpointer.save(save_name, state)
