@@ -542,11 +542,10 @@ def compute_statistics(
     path, 
     params, 
     apply_fn, 
-    preprocessing_fn, 
-    batch_size=1, 
-    image_size=None
+    preprocessing_fn,
+    image_size, 
+    batch_size=1 
 ):
-
     idg = ImageDataGenerator(preprocessing_function = preprocessing_fn)
     image_iterator = idg.flow_from_directory(
         path, 
@@ -556,7 +555,6 @@ def compute_statistics(
         classes = ['']
     )
 
-    # What is act?
     activations = []
     for _ in tqdm(range(len(image_iterator))):
         x = image_iterator.next()
@@ -570,6 +568,39 @@ def compute_statistics(
     sigma = np.cov(activations, rowvar=False)
     return mu, sigma
 
+def load_statistics(path):
+    stats = np.load(path)
+    mu, sigma = stats["mu"], stats["sigma"]
+    return mu, sigma
+
+# Tries to load stastics from a file, if it fails then it computes them.
+def get_fid_statistics(
+    statistics_path, 
+    dataset_path, 
+    params, 
+    apply_fn, 
+    preprocessing_fn,
+    image_size, 
+):
+    if os.path.isfile(statistics_path):
+        mu, sigma = load_statistics(statistics_path)
+        print('FID statistics loaded from:', statistics_path)
+        return mu, sigma
+    else:
+        print('FID statistics not found, computing...')
+        mu, sigma = compute_statistics(
+            dataset_path, 
+            params, 
+            apply_fn, 
+            preprocessing_fn, 
+            image_size
+        )
+        np.savez(statistics_path, mu=mu, sigma=sigma)
+        print('FID statistics saved to:', statistics_path)
+        return mu, sigma
+
 def compute_frechet_distance(mu1, mu2, sigma1, sigma2, eps=1e-6):
     pass
 
+if __name__ == '__main__':
+    statistics_path = '../dataset_info/fid1.npz'
