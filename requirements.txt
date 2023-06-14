@@ -6,3 +6,4 @@ flax
 keras
 tensorflow
 orbax
+tqdm

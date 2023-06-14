@@ -94,7 +94,7 @@ if __name__ == '__main__':
     dataset_path = '../../heightmaps/'
 
     rng = jax.random.PRNGKey(0)
-    model = inception.InceptionV3(pretrained=True)
+    model = inception.InceptionV3()
     params = model.init(rng, jnp.ones((1, 256, 256, 3)))
     apply_fn = jax.jit(functools.partial(model.apply, train=False))
 
