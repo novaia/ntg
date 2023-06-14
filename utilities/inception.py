@@ -6,12 +6,12 @@ import functools
 from typing import Callable, Iterable, Optional, Tuple, Union, Any
 import os
 
-inception_checkpoint = "../../data/models/inception"
-
 class InceptionV3(nn.Module):
+    checkpoint_path: str='../data/inception_v3_weights_fid_old.pickle'
+
     def setup(self):
-        assert os.isfile(inception_checkpoint), "Inception checkpoint not found"
-        self.params_dict = pickle.load(open(inception_checkpoint, "rb"))
+        assert os.path.isfile(self.checkpoint_path), "Inception checkpoint not found"
+        self.params_dict = pickle.load(open(self.checkpoint_path, "rb"))
 
     @nn.compact
     def __call__(self, x, train=True):

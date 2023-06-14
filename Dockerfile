@@ -1,7 +1,7 @@
 FROM nvidia/cuda:11.8.0-cudnn8-devel-ubuntu20.04
 
 RUN apt update
-RUN apt install python -y
+RUN apt install python3 -y
 RUN apt install python3-pip -y
 
 WORKDIR /project
