@@ -1,3 +1,10 @@
+"""
+Mostly taken from: https://github.com/matthias-wright/jax-fid/tree/main
+License: https://github.com/matthias-wright/jax-fid/blob/main/LICENSE
+The code in this file was modified from the original.
+"""
+
+
 import flax.linen as nn
 import jax.numpy as jnp
 import jax
@@ -8,6 +15,7 @@ import os
 
 class InceptionV3(nn.Module):
     checkpoint_path: str='../data/inception_v3_weights_fid_old.pickle'
+    dtype: str='float32'
 
     def setup(self):
         assert os.path.isfile(self.checkpoint_path), "Inception checkpoint not found"
@@ -15,7 +23,6 @@ class InceptionV3(nn.Module):
 
     @nn.compact
     def __call__(self, x, train=True):
-        x = self._transform_input(x)
         x = BasicConv2d(
             out_channels=32,
             kernel_size=(3, 3),
@@ -127,8 +134,8 @@ class Dense(nn.Module):
     def __call__(self, x):
         x = nn.Dense(
             features=self.features,
-            kernel_init= jnp.array(self.params_dict['kernel']),
-            bias_init= jnp.array(self.params_dict['bias'])
+            kernel_init = lambda *_ : jnp.array(get_from_dict(self.params_dict, 'kernel')),
+            bias_init = lambda *_ :  jnp.array(get_from_dict(self.params_dict, 'bias'))
         )(x)
 
         return x
@@ -145,22 +152,23 @@ class BasicConv2d(nn.Module):
     @nn.compact
     def __call__(self, x, train=True):
         x = nn.Conv(
-            features=self.out_channels,        
-            kernel_size=self.kernel_size,
-            strides=self.strides,
-            padding=self.padding,
-            use_bias=self.use_bias,
-            kernel_init= jnp.array(self.params_dict['conv']['kernel']),
-            bias_init= jnp.array(self.params_dict['conv']['bias']),
-            dtype=self.dtype)(x)
+            features = self.out_channels,        
+            kernel_size = self.kernel_size,
+            strides = self.strides,
+            padding = self.padding,
+            use_bias = self.use_bias,
+            kernel_init = lambda *_ : jnp.array(get_from_dict(self.params_dict['conv'], 'kernel')),
+            bias_init = lambda *_ : jnp.array(get_from_dict(self.params_dict['conv'], 'bias')),
+            dtype=self.dtype
+        )(x)
         
         x = nn.BatchNorm(
             epsilon=0.001,
             momentum=0.1,
-            bias_init = jnp.array(self.params_dict['bn']['bias']),
-            scale_init= jnp.array(self.params_dict['bn']['scale']),
-            mean_init= jnp.array(self.params_dict['bn']['mean']),
-            var_init= jnp.array(self.params_dict['bn']['var']),
+            bias_init = lambda *_ :  jnp.array(self.params_dict['bn']['bias']),
+            scale_init = lambda *_ :  jnp.array(self.params_dict['bn']['scale']),
+            mean_init = lambda *_ :  jnp.array(self.params_dict['bn']['mean']),
+            var_init = lambda *_ :  jnp.array(self.params_dict['bn']['var']),
             use_running_average=not train,
             dtype=self.dtype
         )(x)

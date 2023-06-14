@@ -1,19 +1,14 @@
 """
 Frechet Inception Distance.
-Mostly taken from: https://github.com/matthias-wright/jax-fid/blob/main/jax_fid/inception.py
+Mostly taken from: https://github.com/matthias-wright/jax-fid/tree/main
 License: https://github.com/matthias-wright/jax-fid/blob/main/LICENSE
 The code in this file was modified from the original.
 """
 
-import flax.linen as nn
 import jax.numpy as jnp
 import jax
-import pickle
 import functools
-from typing import Callable, Iterable, Optional, Tuple, Union, Any
-
 from tqdm import tqdm
-from PIL import Image
 import os
 import numpy as np
 from keras.preprocessing.image import ImageDataGenerator
@@ -91,7 +86,7 @@ def preprocessing_function(image):
 
 if __name__ == '__main__':
     statistics_path = '../dataset_info/second_pass_fid_stats.npz'
-    dataset_path = '../../heightmaps/'
+    dataset_path = '../../fid_test1/'
 
     rng = jax.random.PRNGKey(0)
     model = inception.InceptionV3()
