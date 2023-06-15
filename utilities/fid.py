@@ -13,8 +13,7 @@ import os
 import numpy as np
 from keras.preprocessing.image import ImageDataGenerator
 import inception
-
-inception_checkpoint = "../../data/models/inception"
+import json
 
 def compute_statistics(
     path, 
@@ -35,8 +34,7 @@ def compute_statistics(
 
     activations = []
     for _ in tqdm(range(len(image_iterator))):
-        x = image_iterator.next()
-        x = jnp.asarray(x)
+        x = jnp.asarray(image_iterator.next()[0])
         x = 2 * x - 1
         predictions = apply_fn(params, jax.lax.stop_gradient(x))
         activations.append(predictions.squeeze(axis=1).squeeze(axis=1))
@@ -44,10 +42,15 @@ def compute_statistics(
 
     mu = jnp.mean(activations, axis=0)
     sigma = np.cov(activations, rowvar=False)
+
+    print('mu shape', mu.shape)
+    print('sigma shape', sigma.shape)
+
     return mu, sigma
 
 def load_statistics(path):
-    stats = np.load(path)
+    with open(path, "r") as f:
+        stats = json.load(f)
     mu, sigma = stats["mu"], stats["sigma"]
     return mu, sigma
 
@@ -73,7 +76,8 @@ def get_fid_statistics(
             preprocessing_fn, 
             image_size
         )
-        np.savez(statistics_path, mu=mu, sigma=sigma)
+        with open(statistics_path, "w") as f:
+            json.dump({'mu': mu.tolist(), 'sigma': sigma.tolist()}, f)
         print('FID statistics saved to:', statistics_path)
         return mu, sigma
 
@@ -85,7 +89,7 @@ def preprocessing_function(image):
     return image
 
 if __name__ == '__main__':
-    statistics_path = '../dataset_info/second_pass_fid_stats.npz'
+    statistics_path = '../dataset_info/second_pass_fid_stats.json'
     dataset_path = '../../fid_test1/'
 
     rng = jax.random.PRNGKey(0)
