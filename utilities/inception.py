@@ -21,8 +21,9 @@ Shape = Tuple[int]
 Dtype = Any
 
 class InceptionV3(nn.Module):
-    checkpoint_path: str='../data/inception_v3_weights_fid_old.pickle'
-    dtype: str='float32'
+    checkpoint_path: str = '../data/inception_v3_weights_fid_old.pickle'
+    dtype: str = 'float32'
+    num_classes: int = 1000
 
     def setup(self):
         assert os.path.isfile(self.checkpoint_path), "Inception checkpoint not found"
@@ -130,6 +131,14 @@ class InceptionV3(nn.Module):
             dtype=self.dtype
         )(x, train)
         x = jnp.mean(x, axis=(1, 2), keepdims=True)
+
+        x = nn.Dropout(rate=0.5)(x, deterministic=not train, rng=rng)
+        x = jnp.reshape(x, newshape=(x.shape[0], -1))
+        x = Dense(
+            features = self.num_classes,
+            params_dict = get_from_dict(self.params_dict, 'fc'),
+            dtype = self.dtype
+        )(x)
         return x
 
 class Dense(nn.Module):
