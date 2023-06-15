@@ -89,7 +89,7 @@ def preprocessing_function(image):
     return image
 
 if __name__ == '__main__':
-    statistics_path = '../dataset_info/second_pass_fid_stats.json'
+    statistics_path = '../data/dataset_info/second_pass_fid_stats.json'
     dataset_path = '../../fid_test1/'
 
     rng = jax.random.PRNGKey(0)

@@ -5,7 +5,7 @@ Pix: a denoising diffusion implicit model (DDIM).
 
 import flax.linen as nn
 import optax
-import orbax.checkpoint
+#import orbax.checkpoint
 import jax
 import jax.numpy as jnp
 import math
@@ -185,7 +185,7 @@ def train_step(state, images, parent_key):
     (loss, updates), grads = grad_fn(state.params)
     state = state.apply_gradients(grads=grads)
     state = state.replace(batch_stats=updates['batch_stats'])
-    return state
+    return loss, state
 
 if __name__ == '__main__':
     print('GPU:', jax.devices('gpu'))
@@ -196,10 +196,10 @@ if __name__ == '__main__':
     state = create_train_state(model, init_rng, learning_rate)
     del init_rng
 
-    checkpointer = orbax.checkpoint.PyTreeCheckpointer()
-    if starting_epoch != 0:
-        checkpoint_path = model_save_path + model_name + '_epoch' + str(starting_epoch - 1)
-        state = checkpointer.restore(checkpoint_path, state)
+    #checkpointer = orbax.checkpoint.PyTreeCheckpointer()
+    #if starting_epoch != 0:
+    #    checkpoint_path = model_save_path + model_name + '_epoch' + str(starting_epoch - 1)
+    #    state = checkpointer.restore(checkpoint_path, state)
 
     idg = ImageDataGenerator(preprocessing_function = preprocessing_function)
     heightmap_iterator = idg.flow_from_directory(
@@ -213,11 +213,12 @@ if __name__ == '__main__':
     epochs = 3
     steps_per_epoch = len(heightmap_iterator)
 
+    losses = []
     for epoch in range(epochs):
         epoch_start_time = datetime.now()
 
+        losses_this_epoch = []
         for step in range(steps_per_epoch):
-            step_start_time = datetime.now()
             images = jnp.asarray(heightmap_iterator.next()[0])
             #jax.device_put(images, 'gpu')
             
@@ -225,9 +226,10 @@ if __name__ == '__main__':
                 continue
             
             train_step_key = jax.random.PRNGKey(epoch * steps_per_epoch + step)
-            state = train_step(state, images, train_step_key)
-            step_end_time = datetime.now()
-        
+            loss, state = train_step(state, images, train_step_key)
+            losses_this_epoch.append(loss)
+        losses.append(sum(losses_this_epoch) / len(losses_this_epoch))
+
         epoch_end_time = datetime.now()
         epoch_delta_time = epoch_end_time - epoch_start_time
         simple_epoch_end_time = str(epoch_end_time.hour) + ':' + str(epoch_end_time.minute)
@@ -243,4 +245,5 @@ if __name__ == '__main__':
         )
 
         save_name = model_save_path + model_name + '_epoch' + str(absolute_epoch+1)
-        checkpointer.save(save_name, state)
+        #checkpointer.save(save_name, state)
+    print('losses', losses)
