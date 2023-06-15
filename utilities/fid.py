@@ -12,7 +12,7 @@ from tqdm import tqdm
 import os
 import numpy as np
 from keras.preprocessing.image import ImageDataGenerator
-import inception
+import fid_inception
 import json
 
 def compute_statistics(
@@ -49,8 +49,7 @@ def compute_statistics(
     return mu, sigma
 
 def load_statistics(path):
-    with open(path, "r") as f:
-        stats = json.load(f)
+    stats = np.load(path)
     mu, sigma = stats["mu"], stats["sigma"]
     return mu, sigma
 
@@ -76,8 +75,7 @@ def get_fid_statistics(
             preprocessing_fn, 
             image_size
         )
-        with open(statistics_path, "w") as f:
-            json.dump({'mu': mu.tolist(), 'sigma': sigma.tolist()}, f)
+        np.savez(statistics_path, mu=mu, sigma=sigma)
         print('FID statistics saved to:', statistics_path)
         return mu, sigma
 
