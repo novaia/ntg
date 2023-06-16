@@ -28,11 +28,11 @@ class InceptionV3(nn.Module):
     num_classes: int = 1000
 
     def setup(self):
-        assert os.path.isfile(self.checkpoint_path), "Inception checkpoint not found"
-        self.params_dict = pickle.load(open(self.checkpoint_path, "rb"))
+        assert os.path.isfile(self.checkpoint_path), 'Inception checkpoint not found'
+        self.params_dict = pickle.load(open(self.checkpoint_path, 'rb'))
 
     @nn.compact
-    def __call__(self, x, train=True):
+    def __call__(self, x, train=False):
         x = BasicConv2d(
             out_channels=32,
             kernel_size=(3, 3),
@@ -41,16 +41,20 @@ class InceptionV3(nn.Module):
             dtype=self.dtype
         )(x, train)
 
-        x = BasicConv2d(out_channels=32,
-                        kernel_size=(3, 3),
-                        params_dict=get_from_dict(self.params_dict, 'Conv2d_2a_3x3'),
-                        dtype=self.dtype)(x, train)
+        x = BasicConv2d(
+            out_channels=32,
+            kernel_size=(3, 3),
+            params_dict=get_from_dict(self.params_dict, 'Conv2d_2a_3x3'),
+            dtype=self.dtype
+        )(x, train)
         
-        x = BasicConv2d(out_channels=64,
-                        kernel_size=(3, 3),
-                        padding=((1, 1), (1, 1)),
-                        params_dict=get_from_dict(self.params_dict, 'Conv2d_2b_3x3'),
-                        dtype=self.dtype)(x, train)
+        x = BasicConv2d(
+            out_channels=64,
+            kernel_size=(3, 3),
+            padding=((1, 1), (1, 1)),
+            params_dict=get_from_dict(self.params_dict, 'Conv2d_2b_3x3'),
+            dtype=self.dtype
+        )(x, train)
         
         x = nn.max_pool(x, window_shape=(3, 3), strides=(2, 2))
         x = BasicConv2d(
