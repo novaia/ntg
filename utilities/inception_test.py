@@ -16,3 +16,9 @@ if np.array_equal(mu1, mu2) and np.array_equal(sigma1, sigma2):
     print("The mu and sigma from both files are the same.")
 else:
     print("The mu and sigma from both files are different.")
+
+if np.array_equal(mu1, mu2):
+    print("The mu from both files are the same.")
+
+if np.array_equal(sigma1, sigma2):
+    print("The sigma from both files are the same.")
