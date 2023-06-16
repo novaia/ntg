@@ -25,7 +25,8 @@ def compute_statistics(
     params, 
     apply_fn, 
     preprocessing_fn,
-    image_size, 
+    image_size,
+    img_size=None, 
     batch_size=1 
 ):
     #idg = ImageDataGenerator(preprocessing_function = preprocessing_fn)
@@ -217,5 +218,3 @@ if __name__ == '__main__':
 
     fid = compute_frechet_distance_alt(mu1, mu2, sigma1, sigma2)
     print('FID:', fid)
-
-    
