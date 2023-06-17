@@ -12,13 +12,13 @@ from tqdm import tqdm
 import os
 import numpy as np
 from keras.preprocessing.image import ImageDataGenerator
-import fid_inception
+#import fid_inception
 import json
 import scipy
 
 # temp
 from PIL import Image
-#import intest
+import intest
 
 def test_compute_statistics(path, params, apply_fn, batch_size=1, img_size=None):
     if path.endswith(".npz"):
@@ -98,8 +98,8 @@ def preprocessing_function(image):
 
 if __name__ == '__main__':
     rng = jax.random.PRNGKey(0)
-    #model = intest.InceptionV3(pretrained=True)
-    model = fid_inception.InceptionV3()
+    model = intest.InceptionV3(pretrained=True)
+    #model = fid_inception.InceptionV3()
     params = model.init(rng, jnp.ones((1, 256, 256, 3)))
     apply_fn = jax.jit(functools.partial(model.apply, train=False))
 
