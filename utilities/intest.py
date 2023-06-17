@@ -119,8 +119,10 @@ class InceptionV3(nn.Module):
         x = InceptionE(nn.max_pool, params_dict=utils.get(self.params_dict, 'Mixed_7c'),
                        dtype=self.dtype)(x, train)
         x = jnp.mean(x, axis=(1, 2), keepdims=True)
+        print('1')
         if not self.include_head:
             return x
+        print('2')
         x = nn.Dropout(rate=0.5)(x, deterministic=not train, rng=rng)
         x = jnp.reshape(x, newshape=(x.shape[0], -1))
         x = Dense(features=self.num_classes_,
@@ -128,10 +130,12 @@ class InceptionV3(nn.Module):
                   dtype=self.dtype)(x)
         if self.aux_logits:
             return x, aux
+        print('3')
         return x
 
     def _transform_input(self, x):
         if self.transform_input:
+            print('here')
             x_ch0 = jnp.expand_dims(x[..., 0], axis=-1) * (0.229 / 0.5) + (0.485 - 0.5) / 0.5
             x_ch1 = jnp.expand_dims(x[..., 1], axis=-1) * (0.224 / 0.5) + (0.456 - 0.5) / 0.5
             x_ch2 = jnp.expand_dims(x[..., 2], axis=-1) * (0.225 / 0.5) + (0.406 - 0.5) / 0.5

@@ -31,8 +31,10 @@ class InceptionV3(nn.Module):
         assert os.path.isfile(self.checkpoint_path), 'Inception checkpoint not found'
         self.params_dict = pickle.load(open(self.checkpoint_path, 'rb'))
 
+    # when I left off I was testing train (bool) values
+    # TODO: here
     @nn.compact
-    def __call__(self, x, train=False):
+    def __call__(self, x, train=True):
         x = BasicConv2d(
             out_channels=32,
             kernel_size=(3, 3),
@@ -125,7 +127,7 @@ class InceptionV3(nn.Module):
         )(x, train)
         
         x = InceptionE(
-            nn.avg_pool, params_dict=get_from_dict(self.params_dict, 'Mixed_7b'),
+            avg_pool, params_dict=get_from_dict(self.params_dict, 'Mixed_7b'),
             dtype=self.dtype
         )(x, train)
 
@@ -272,6 +274,52 @@ class BatchNorm(nn.Module):
             ).reshape(feature_shape)
             y = y + bias
         return jnp.asarray(y, self.dtype)
+
+# Taken from: https://github.com/google/flax/blob/main/flax/linen/pooling.py
+def pool(inputs, init, reduce_fn, window_shape, strides, padding):
+    strides = strides or (1,) * len(window_shape)
+    assert len(window_shape) == len(strides), (
+        f"len({window_shape}) == len({strides})")
+    strides = (1,) + strides + (1,)
+    dims = (1,) + window_shape + (1,)
+
+    is_single_input = False
+    if inputs.ndim == len(dims) - 1:
+      # Add singleton batch dimension because lax.reduce_window always
+      # needs a batch dimension.
+      inputs = inputs[None]
+      is_single_input = True
+
+    assert inputs.ndim == len(dims), f"len({inputs.shape}) != len({dims})"
+    if not isinstance(padding, str):
+      padding = tuple(map(tuple, padding))
+      assert(len(padding) == len(window_shape)), (
+        f"padding {padding} must specify pads for same number of dims as "
+        f"window_shape {window_shape}")
+      assert(all([len(x) == 2 for x in padding])), (
+        f"each entry in padding {padding} must be length 2")
+      padding = ((0,0),) + padding + ((0,0),)
+    y = jax.lax.reduce_window(inputs, init, reduce_fn, dims, strides, padding)
+    if is_single_input:
+      y = jnp.squeeze(y, axis=0)
+    return y
+
+def avg_pool(inputs, window_shape, strides=None, padding='VALID'):
+    assert inputs.ndim == 4
+    assert len(window_shape) == 2
+
+    y = pool(inputs, 0., jax.lax.add, window_shape, strides, padding)
+    ones = jnp.ones(shape=(1, inputs.shape[1], inputs.shape[2], 1)).astype(inputs.dtype)
+    counts = jax.lax.conv_general_dilated(
+        ones,
+        jnp.expand_dims(jnp.ones(window_shape).astype(inputs.dtype), axis=(-2, -1)),
+        window_strides=(1, 1),
+        padding=((1, 1), (1, 1)),
+        dimension_numbers=nn.linear._conv_dimension_numbers(ones.shape),
+        feature_group_count=1
+    )
+    y = y / counts 
+    return y
     
 class InceptionA(nn.Module):
     pool_features: int
@@ -325,7 +373,7 @@ class InceptionA(nn.Module):
             dtype=self.dtype
         )(branch3x3dbl, train)
 
-        branch_pool = nn.avg_pool(
+        branch_pool = avg_pool(
             x, 
             window_shape=(3, 3), 
             strides=(1, 1), 
@@ -460,7 +508,7 @@ class InceptionC(nn.Module):
             dtype=self.dtype
         )(branch7x7dbl, train)
 
-        branch_pool = nn.avg_pool(
+        branch_pool = avg_pool(
             x, 
             window_shape=(3, 3), 
             strides=(1, 1), 
