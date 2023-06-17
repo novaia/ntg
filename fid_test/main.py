@@ -42,8 +42,8 @@ def main():
         assert os.path.isdir(args.path2) or args.path2.endswith('.npz'), 'path2 must be a directory or an .npz file'
         #mu1, sigma1 = fid.compute_statistics(args.path1, params, apply_fn, args.batch_size, args.img_size)
         #mu2, sigma2 = fid.compute_statistics(args.path2, params, apply_fn, args.batch_size, args.img_size)
-        mu1, sigma1 = fid.compute_statistics(args.path1, params, apply_fn, args.batch_size, (256, 256))
-        mu2, sigma2 = fid.compute_statistics(args.path2, params, apply_fn, args.batch_size, (256, 256))
+        mu1, sigma1 = fid.compute_statistics(args.path1, params, apply_fn, args.batch_size, args.img_size)
+        mu2, sigma2 = fid.compute_statistics(args.path2, params, apply_fn, args.batch_size, args.img_size)
         
 
         fid_score = fid.compute_frechet_distance(mu1, mu2, sigma1, sigma2, eps=1e-6)
