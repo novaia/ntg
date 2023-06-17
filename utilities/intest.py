@@ -16,7 +16,7 @@ Shape = Tuple[int]
 Dtype = Any
 
 
-class InceptionV6(nn.Module):
+class InceptionV3(nn.Module):
     """
     InceptionV3 network.
     Reference: https://arxiv.org/abs/1512.00567
