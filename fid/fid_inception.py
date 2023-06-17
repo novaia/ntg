@@ -6,7 +6,6 @@ License: https://github.com/matthias-wright/jax-fid/blob/main/LICENSE
 The code in this file was modified from the original.
 """
 
-
 import flax.linen as nn
 import jax.numpy as jnp
 import jax
