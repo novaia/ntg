@@ -2,6 +2,8 @@
 This is the model and training code for
 Pix: a denoising diffusion implicit model (DDIM).
 '''
+import sys
+sys.path.append('../')
 
 import flax.linen as nn
 import optax
@@ -14,6 +16,7 @@ from typing import Any
 from keras.preprocessing.image import ImageDataGenerator
 from datetime import datetime
 import os
+from fid import fid
 
 starting_epoch = 0 # 0 if training from scratch.
 data_path = '../../heightmaps/'
@@ -186,6 +189,9 @@ def train_step(state, images, parent_key):
     state = state.apply_gradients(grads=grads)
     state = state.replace(batch_stats=updates['batch_stats'])
     return loss, state
+
+def fid_benchmark():
+    pass
 
 if __name__ == '__main__':
     print('GPU:', jax.devices('gpu'))

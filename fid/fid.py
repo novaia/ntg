@@ -4,6 +4,8 @@ Mostly taken from: https://github.com/matthias-wright/jax-fid/tree/main
 License: https://github.com/matthias-wright/jax-fid/blob/main/LICENSE
 The code in this file was modified from the original.
 """
+import sys
+sys.path.append('../')
 
 import jax.numpy as jnp
 import jax
@@ -12,7 +14,7 @@ from tqdm import tqdm
 import os
 import numpy as np
 from keras.preprocessing.image import ImageDataGenerator
-import fid_inception
+from fid import fid_inception
 import scipy
 import argparse
 
@@ -23,10 +25,10 @@ def compute_statistics(path, params, apply_fn, batch_size=1, img_size=None):
     images = []
     for f in tqdm(os.listdir(path)):
         img = Image.open(os.path.join(path, f))
-        # convert if only a single channel
+        # Convert if only a single channel.
         if img.mode == "L":
             img = img.convert("RGB")
-        # resize if not the right size
+        # Resize if not the right size.
         if img_size is not None and img.size[:2] != img_size:
             img = img.resize(
                 size=(img_size[0], img_size[1]),
