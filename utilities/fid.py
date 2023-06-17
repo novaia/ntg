@@ -12,13 +12,48 @@ from tqdm import tqdm
 import os
 import numpy as np
 from keras.preprocessing.image import ImageDataGenerator
-#import fid_inception
+import fid_inception
 import json
 import scipy
 
 # temp
 from PIL import Image
-import intest
+#import intest
+
+def test_compute_statistics(path, params, apply_fn, batch_size=1, img_size=None):
+    if path.endswith(".npz"):
+        stats = np.load(path)
+        mu, sigma = stats["mu"], stats["sigma"]
+        return mu, sigma
+
+    images = []
+    for f in tqdm(os.listdir(path)):
+        img = Image.open(os.path.join(path, f))
+        # convert if only a single channel
+        if img.mode == "L":
+            img = img.convert("RGB")
+        # resize if not the right size
+        if img_size is not None and img.size[:2] != img_size:
+            img = img.resize(
+                size=(img_size[0], img_size[1]),
+                resample=Image.BILINEAR,
+            )
+        img = np.array(img) / 255.0
+        images.append(img)
+
+    num_batches = int(len(images) // batch_size)
+    act = []
+    for i in tqdm(range(num_batches)):
+        x = images[i * batch_size : i * batch_size + batch_size]
+        x = np.asarray(x)
+        x = 2 * x - 1
+        pred = apply_fn(params, jax.lax.stop_gradient(x))
+        act.append(pred.squeeze(axis=1).squeeze(axis=1))
+    act = jnp.concatenate(act, axis=0)
+
+    mu = np.mean(act, axis=0)
+    sigma = np.cov(act, rowvar=False)
+    return mu, sigma
 
 def load_statistics(path):
     stats = np.load(path)
@@ -62,8 +97,26 @@ def preprocessing_function(image):
     return image
 
 if __name__ == '__main__':
-    mu1, sigma1 = load_statistics('../data/dataset_info/fid_test1_stats.npz')
-    mu2, sigma2 = load_statistics('../data/dataset_info/fid_test2_stats.npz')
+    rng = jax.random.PRNGKey(0)
+    #model = intest.InceptionV3(pretrained=True)
+    model = fid_inception.InceptionV3()
+    params = model.init(rng, jnp.ones((1, 256, 256, 3)))
+    apply_fn = jax.jit(functools.partial(model.apply, train=False))
+
+    mu1, sigma1 = test_compute_statistics(
+        #'../data/dataset_info/fid_test1_stats.npz',
+        '../../fid_test1',
+        params,
+        apply_fn,
+        batch_size=50
+    )
+    mu2, sigma2 = test_compute_statistics(
+        #'../data/dataset_info/fid_test2_stats.npz',
+        '../../fid_test2',
+        params,
+        apply_fn,
+        batch_size=50
+    )
 
     fid = test_function(mu1, mu2, sigma1, sigma2)
     print('FID:', fid)
