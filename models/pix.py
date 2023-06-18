@@ -193,21 +193,24 @@ def train_step(state, images, parent_key):
 def fid_benchmark(apply_fn, params, batch_stats):
     start_time = datetime.now()
     print('sampling')
-    samples = reverse_diffusion(
-        apply_fn=apply_fn, 
-        params=params,
-        batch_stats=batch_stats, 
-        num_images=20, 
-        diffusion_steps=10, 
-        image_height=256, 
-        image_width=256, 
-        channels=1, 
-        diffusion_schedule_fn=diffusion_schedule,
-    )
+    all_samples = []
+    for _ in range(500):
+        samples = reverse_diffusion(
+            apply_fn=apply_fn, 
+            params=params,
+            batch_stats=batch_stats, 
+            num_images=20, 
+            diffusion_steps=10, 
+            image_height=256, 
+            image_width=256, 
+            channels=1, 
+            diffusion_schedule_fn=diffusion_schedule,
+        )
+        all_samples.append(samples)
     end_time = datetime.now()
     delta_time = end_time - start_time
     print('sampling time:', delta_time)
-    print('num samples:', len(samples))
+    print('num samples:', len(all_samples) * 20)
 
 if __name__ == '__main__':
     print('GPU:', jax.devices('gpu'))
