@@ -5,18 +5,19 @@ Pix: a denoising diffusion implicit model (DDIM).
 import sys
 sys.path.append('../')
 
+import os
+import math
+from datetime import datetime
+from typing import Any
 import flax.linen as nn
-import optax
-#import orbax.checkpoint
+from flax.training import train_state
+import optax # Optimizers.
+import orbax.checkpoint 
 import jax
 import jax.numpy as jnp
-import math
-from flax.training import train_state
-from typing import Any
 from keras.preprocessing.image import ImageDataGenerator
-from datetime import datetime
-import os
 from fid import fid
+from inference.reverse_diffusion import reverse_diffusion
 
 starting_epoch = 0 # 0 if training from scratch.
 data_path = '../../heightmaps/'
@@ -149,7 +150,6 @@ def diffusion_schedule(diffusion_times):
     noise_rates = jnp.sin(diffusion_angles)
     return noise_rates, signal_rates    
 
-
 # Training.
 class TrainState(train_state.TrainState):
     batch_stats: Any
@@ -190,22 +190,40 @@ def train_step(state, images, parent_key):
     state = state.replace(batch_stats=updates['batch_stats'])
     return loss, state
 
-def fid_benchmark():
-    pass
+def fid_benchmark(apply_fn, params, batch_stats):
+    start_time = datetime.now()
+    print('sampling')
+    samples = reverse_diffusion(
+        apply_fn=apply_fn, 
+        params=params,
+        batch_stats=batch_stats, 
+        num_images=20, 
+        diffusion_steps=10, 
+        image_height=256, 
+        image_width=256, 
+        channels=1, 
+        diffusion_schedule_fn=diffusion_schedule,
+    )
+    end_time = datetime.now()
+    delta_time = end_time - start_time
+    print('sampling time:', delta_time)
+    print('num samples:', len(samples))
 
 if __name__ == '__main__':
     print('GPU:', jax.devices('gpu'))
-    print(jax.devices())
 
     init_rng = jax.random.PRNGKey(0)
     model = DDIM(widths, block_depth)
     state = create_train_state(model, init_rng, learning_rate)
     del init_rng
 
-    #checkpointer = orbax.checkpoint.PyTreeCheckpointer()
-    #if starting_epoch != 0:
-    #    checkpoint_path = model_save_path + model_name + '_epoch' + str(starting_epoch - 1)
-    #    state = checkpointer.restore(checkpoint_path, state)
+    fid_benchmark(state.apply_fn, state.params, state.batch_stats)
+    exit(0)
+
+    checkpointer = orbax.checkpoint.PyTreeCheckpointer()
+    if starting_epoch != 0:
+        checkpoint_path = model_save_path + model_name + '_epoch' + str(starting_epoch - 1)
+        state = checkpointer.restore(checkpoint_path, state)
 
     idg = ImageDataGenerator(preprocessing_function = preprocessing_function)
     heightmap_iterator = idg.flow_from_directory(
@@ -226,7 +244,6 @@ if __name__ == '__main__':
         losses_this_epoch = []
         for step in range(steps_per_epoch):
             images = jnp.asarray(heightmap_iterator.next()[0])
-            #jax.device_put(images, 'gpu')
             
             if images.shape[0] != batch_size:
                 continue
@@ -251,5 +268,5 @@ if __name__ == '__main__':
         )
 
         save_name = model_save_path + model_name + '_epoch' + str(absolute_epoch+1)
-        #checkpointer.save(save_name, state)
+        checkpointer.save(save_name, state)
     print('losses', losses)

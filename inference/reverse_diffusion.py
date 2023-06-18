@@ -1,10 +1,12 @@
 import jax
+from jax import lax
 import jax.numpy as jnp
 
-@jax.jit
+#@jax.jit
 def reverse_diffusion(
-    model, 
-    params, 
+    apply_fn, 
+    params,
+    batch_stats,
     num_images, 
     diffusion_steps, 
     image_width, 
@@ -26,8 +28,14 @@ def reverse_diffusion(
         
         diffusion_times = jnp.ones((num_images, 1, 1, 1)) - step * step_size
         noise_rates, signal_rates = diffusion_schedule_fn(diffusion_times)
-        
-        pred_noises = model.apply(params, [noisy_images, noise_rates**2], mutable=False)
+        #pred_noises = apply_fn(params, [noisy_images, noise_rates**2], mutable=False)
+        pred_noises = lax.stop_gradient(
+            apply_fn(
+                {'params': params, 'batch_stats': batch_stats}, 
+                [noisy_images, noise_rates**2],
+                train=False,    
+            )
+        )
         pred_images = (noisy_images - noise_rates * pred_noises) / signal_rates
         
         next_diffusion_times = diffusion_times - step_size
