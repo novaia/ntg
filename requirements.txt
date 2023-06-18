@@ -5,5 +5,5 @@ opencv-python
 flax
 keras
 tensorflow
-orbax
+orbax-checkpoint
 tqdm
