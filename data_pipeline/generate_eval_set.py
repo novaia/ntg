@@ -6,7 +6,7 @@ from tqdm import tqdm
 
 dataset_path = '../../heightmaps/uncorrupted_split_heightmaps_second_pass'
 out_path = '../../heightmaps/uncorrupted_split_heightmaps_second_pass_eval'
-num_samples = 5000
+num_samples = 4500
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
