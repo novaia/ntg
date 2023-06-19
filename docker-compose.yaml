@@ -5,9 +5,7 @@ services:
       - 8888:8888
     volumes:
       - .:/project
-      - ../heightmaps/uncorrupted_split_heightmaps_second_pass:/heightmaps
-      - ../heightmaps/fid_test1:/fid_test1
-      - ../heightmaps/fid_test2:/fid_test2
+      - ../heightmaps:/heightmaps
     deploy:
       resources:
         reservations:
