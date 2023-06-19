@@ -14,7 +14,7 @@ from tqdm import tqdm
 import os
 import numpy as np
 from keras.preprocessing.image import ImageDataGenerator
-from fid import fid_inception
+import fid_inception
 import scipy
 import argparse
 

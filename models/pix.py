@@ -20,7 +20,7 @@ from fid import fid
 from inference.reverse_diffusion import reverse_diffusion
 
 starting_epoch = 0 # 0 if training from scratch.
-data_path = '../../heightmaps/'
+data_path = '../../heightmaps/uncorrupted_split_heightmaps_second_pass'
 model_save_path = '../data/models/diffusion_models/'
 model_name = 'pix'
 image_save_path = '../data/images/'
