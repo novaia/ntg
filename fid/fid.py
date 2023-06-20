@@ -21,26 +21,10 @@ import argparse
 # temp
 from PIL import Image
 
-def compute_statistics(path, params, apply_fn, batch_size=1, img_size=None):
-    images = []
-    for f in tqdm(os.listdir(path)):
-        img = Image.open(os.path.join(path, f))
-        # Convert if only a single channel.
-        if img.mode == "L":
-            img = img.convert("RGB")
-        # Resize if not the right size.
-        if img_size is not None and img.size[:2] != img_size:
-            img = img.resize(
-                size=(img_size[0], img_size[1]),
-                resample=Image.BILINEAR,
-            )
-        img = np.array(img) / 255.0
-        images.append(img)
-
-    num_batches = int(len(images) // batch_size)
+def compute_statistics(params, apply_fn, num_batches, get_batch_fn):
     act = []
-    for i in tqdm(range(num_batches)):
-        x = images[i * batch_size : i * batch_size + batch_size]
+    for _ in tqdm(range(num_batches)):
+        x = get_batch_fn()
         x = np.asarray(x)
         x = 2 * x - 1
         pred = apply_fn(params, jax.lax.stop_gradient(x))
@@ -91,18 +75,29 @@ def compute_frechet_distance(mu1, mu2, sigma1, sigma2, eps=1e-6):
     tr_covmean = np.trace(covmean)
     return diff.dot(diff) + np.trace(sigma1) + np.trace(sigma2) - 2 * tr_covmean
 
-def _precompute_and_save_statistics(args, params, apply_fn):
+def _get_directory_iterator(path, args, data_generator):
+    directory_iterator = data_generator.flow_from_directory(
+        path,
+        target_size = args.img_size,
+        batch_size = args.batch_size,
+        color_mode = 'rgb',
+        classes = ['']
+    )
+    return directory_iterator
+
+def _precompute_and_save_statistics(args, params, apply_fn, data_generator):
     error_text = 'img_dir must be specified if precompute_stats is True'
     assert args.img_dir is not None, error_text
     error_text = 'out_dir must be specified if precompute_stats is True'
     assert args.out_dir is not None, error_text 
-    
+
+    directory_iterator = _get_directory_iterator(args.img_dir, args, data_generator)
+
     mu, sigma = compute_statistics(
-        args.img_dir, 
         params, 
         apply_fn, 
-        args.batch_size, 
-        args.img_size
+        num_batches = len(directory_iterator),
+        get_batch_fn = lambda: directory_iterator.next()[0]
     )
 
     os.makedirs(args.out_dir, exist_ok=True)
@@ -112,32 +107,33 @@ def _precompute_and_save_statistics(args, params, apply_fn):
         os.path.join(args.out_dir, args.out_name + '.npz')
     )
 
-def _get_statistics_and_compute_fid(args, params, apply_fn):
+def _get_statistics_and_compute_fid(args, params, apply_fn, data_generator):
     error_text = 'path1 must be specified if precompute_stats is False'
     assert args.path1 is not None, error_text
     error_text = 'path2 must be specified if precompute_stats is False'
     assert args.path2 is not None, error_text
 
+
     if args.path1.endswith('.npz'):
         mu1, sigma1 = load_statistics(args.path1)
     else:
+        directory_iterator1 = _get_directory_iterator(args.path1, args, data_generator)
         mu1, sigma1 = compute_statistics(
-            args.path1, 
             params, 
             apply_fn, 
-            args.batch_size, 
-            args.img_size
+            num_batches = len(directory_iterator1),
+            get_batch_fn = lambda: directory_iterator1.next()[0]
         )
 
     if args.path2.endswith('.npz'):
         mu2, sigma2 = load_statistics(args.path2)
     else:
+        directory_iterator2 = _get_directory_iterator(args.path2, args, data_generator)
         mu2, sigma2 = compute_statistics(
-            args.path2, 
             params, 
             apply_fn, 
-            args.batch_size, 
-            args.img_size
+            num_batches = len(directory_iterator2),
+            get_batch_fn = lambda: directory_iterator2.next()[0]
         )
 
     fid = compute_frechet_distance(mu1, mu2, sigma1, sigma2)
@@ -171,8 +167,9 @@ if __name__ == '__main__':
     model = fid_inception.InceptionV3()
     params = model.init(rng, jnp.ones((1, 256, 256, 3)))
     apply_fn = jax.jit(functools.partial(model.apply, train=False))
+    idg = ImageDataGenerator(preprocessing_function = preprocessing_function)
 
     if args.precompute:
-        _precompute_and_save_statistics(args, params, apply_fn)
+        _precompute_and_save_statistics(args, params, apply_fn, idg)
     else:
-        _get_statistics_and_compute_fid(args, params, apply_fn)
+        _get_statistics_and_compute_fid(args, params, apply_fn, idg)
