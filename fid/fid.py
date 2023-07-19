@@ -22,17 +22,29 @@ import argparse
 from PIL import Image
 
 def compute_statistics(params, apply_fn, num_batches, get_batch_fn):
-    act = []
+    activations = []
+    iterative_mu = None
     for _ in tqdm(range(num_batches)):
         x = get_batch_fn()
         x = np.asarray(x)
         x = 2 * x - 1
         pred = apply_fn(params, jax.lax.stop_gradient(x))
-        act.append(pred.squeeze(axis=1).squeeze(axis=1))
-    act = jnp.concatenate(act, axis=0)
+        activations.append(pred.squeeze(axis=1).squeeze(axis=1))
+        #temp_activations = pred.squeeze(axis=1).squeeze(axis=1)
+        #if iterative_mu is None:
+        #    iterative_mu = np.mean(temp_activations, axis=0)
+        #    print(iterative_mu.shape)
+        #else:
+        #    iterative_mu = iterative_mu + np.mean(temp_activations, axis=0)
+        #    print(iterative_mu.shape)
+    activations = jnp.concatenate(activations, axis=0)
+    print('activations', activations.shape)
+    mu = np.mean(activations, axis=0)
+    print('mu', mu.shape)
+    sigma = np.cov(activations, rowvar=False)
 
-    mu = np.mean(act, axis=0)
-    sigma = np.cov(act, rowvar=False)
+    print('iterative mu', iterative_mu)
+    print('mu', mu)
     return mu, sigma
 
 def load_statistics(path):
