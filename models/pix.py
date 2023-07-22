@@ -12,7 +12,7 @@ from typing import Any
 import flax.linen as nn
 from flax.training import train_state
 import optax # Optimizers.
-import orbax.checkpoint 
+#import orbax.checkpoint 
 import jax
 import jax.numpy as jnp
 from keras.preprocessing.image import ImageDataGenerator
@@ -194,7 +194,7 @@ def fid_benchmark(apply_fn, params, batch_stats):
     start_time = datetime.now()
     print('sampling')
     all_samples = []
-    for _ in range(500):
+    for _ in range(50):
         samples = reverse_diffusion(
             apply_fn=apply_fn, 
             params=params,
@@ -211,6 +211,24 @@ def fid_benchmark(apply_fn, params, batch_stats):
     delta_time = end_time - start_time
     print('sampling time:', delta_time)
     print('num samples:', len(all_samples) * 20)
+
+    class SampleGenerator:
+        def __init__(self, samples):
+            self.samples = samples
+            self.index = 0
+
+        def __next__(self):
+            next_sample = self.samples[self.index]
+            self.index += 1
+            if self.index == len(self.samples): self.index = 0
+            return next_sample
+    sample_generator = SampleGenerator(all_samples)
+
+    params, apply_fn = fid.get_inception_model()
+    mu1, sigma1 = fid.compute_statistics(params, apply_fn, len(all_samples), lambda: next(sample_generator))
+    mu2, sigma2 = fid.load_statistics('../data/dataset_info/stats.npz')
+    fid_value = fid.calculate_frechet_distance(mu1, sigma1, mu2, sigma2)
+    print('FID:', fid_value)
 
 if __name__ == '__main__':
     print('GPU:', jax.devices('gpu'))
