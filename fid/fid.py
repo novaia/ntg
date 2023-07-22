@@ -14,7 +14,7 @@ from tqdm import tqdm
 import os
 import numpy as np
 from keras.preprocessing.image import ImageDataGenerator
-import fid_inception
+from fid import fid_inception
 import scipy
 import argparse
 
@@ -140,6 +140,13 @@ def _get_statistics_and_compute_fid(args, params, apply_fn, data_generator):
     fid = compute_frechet_distance(mu1, mu2, sigma1, sigma2)
     print('FID:', fid)
 
+def get_inception_model():
+    rng = jax.random.PRNGKey(0)
+    model = fid_inception.InceptionV3()
+    params = model.init(rng, jnp.ones((1, 256, 256, 3)))
+    apply_fn = jax.jit(functools.partial(model.apply, train=False))
+    return params, apply_fn
+
 def preprocessing_function(image):
     image = image.astype(float) / 255
     return image
@@ -164,10 +171,7 @@ if __name__ == '__main__':
     parser.add_argument('--out_name', type=str, default='stats', help='Name of dataset')
     args = parser.parse_args()
 
-    rng = jax.random.PRNGKey(0)
-    model = fid_inception.InceptionV3()
-    params = model.init(rng, jnp.ones((1, 256, 256, 3)))
-    apply_fn = jax.jit(functools.partial(model.apply, train=False))
+    params, apply_fn = get_inception_model()
     idg = ImageDataGenerator(preprocessing_function = preprocessing_function)
 
     if args.precompute:
