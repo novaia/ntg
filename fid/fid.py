@@ -17,9 +17,44 @@ from keras.preprocessing.image import ImageDataGenerator
 from fid import fid_inception
 import scipy
 import argparse
+import mmap
 
 # temp
 from PIL import Image
+
+def compute_statistics_mmapped(params, apply_fn, num_batches, get_batch_fn, filename, dtype):
+    activation_dim = 2048
+    dtype_size = np.dtype(dtype).itemsize
+    size = dtype_size * activation_dim
+
+    with open(filename, "w+b") as f:
+        mm = mmap.mmap(f.fileno(), num_batches * np.dtype(np.float32).itemsize)
+        activation_sum = np.zeros((1, activation_dim), dtype=dtype)
+        
+        for i in tqdm(range(num_batches)):
+            x = get_batch_fn()
+            x = np.asarray(x)
+            x = 2 * x - 1
+            activation = apply_fn(params, jax.lax.stop_gradient(x))
+            activation_sum += activation
+            mm[i * size : (i + 1) * size] = activation.tobytes()
+
+        mu = activation_sum / num_batches
+
+        sigma = np.zeros((activation_dim, activation_dim), dtype=dtype)
+        observations = np.zeros((2, activation_dim), dtype=dtype)
+        x_id = 0
+        y_id = 1
+        for x_id in range(activation_dim):
+            for y_id in range(activation_dim):
+                for i in range(num_batches):
+                    x_offset = i * size + x_id * dtype_size
+                    observations[0][i] = np.frombuffer(mm[x_offset : x_offset+dtype_size], dtype=dtype)
+                    y_offset = i * size + y_id * dtype_size
+                    observations[1][i] = np.frombuffer(mm[y_offset : y_offset+dtype_size], dtype=dtype)
+                sigma[x_id][y_id] = np.cov(observations)
+
+    return mu, sigma
 
 def compute_statistics(params, apply_fn, num_batches, get_batch_fn):
     activations = []
