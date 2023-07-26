@@ -14,7 +14,8 @@ from tqdm import tqdm
 import os
 import numpy as np
 from keras.preprocessing.image import ImageDataGenerator
-from fid import fid_inception
+#from fid import fid_inception
+import fid_inception
 import scipy
 import argparse
 import mmap
@@ -27,10 +28,15 @@ def compute_statistics_mmapped(params, apply_fn, num_batches, get_batch_fn, file
     dtype_size = np.dtype(dtype).itemsize
     size = dtype_size * activation_dim
 
-    with open(filename, "w+b") as f:
+    fd = os.open(filename, os.O_RDWR | os.O_CREAT)
+    os.ftruncate(fd, num_batches * activation_dim * np.dtype(dtype).itemsize)
+    fd.flush()
+    os.close(fd)
+
+    with open(filename, "r+b") as f:
         mm = mmap.mmap(f.fileno(), num_batches * np.dtype(np.float32).itemsize)
         activation_sum = np.zeros((1, activation_dim), dtype=dtype)
-        
+
         for i in tqdm(range(num_batches)):
             x = get_batch_fn()
             x = np.asarray(x)
