@@ -3,6 +3,7 @@ from keras.preprocessing.image import ImageDataGenerator
 
 img_size = (256, 256)
 batch_size = 50
+dtype = 'float32'
 
 def get_iterator(path, data_generator):
     iterator = data_generator.flow_from_directory(
@@ -20,28 +21,29 @@ def preprocessing_function(image):
 
 if __name__ == '__main__':
     idg = ImageDataGenerator(preprocessing_function = preprocessing_function)
-    dataset1 = get_iterator('../../fid_test1', idg)
-    dataset2 = get_iterator('../../fid_test2', idg)
+    dataset1 = get_iterator('../../heightmaps/fid_test1', idg)
+    dataset2 = get_iterator('../../heightmaps/fid_test2', idg)
     params, apply_fn = fid.get_inception_model()
 
     mmap_mu1, mmap_sigma1 = fid.compute_statistics_mmapped(
         params, 
         apply_fn,
-        num_batches = len(dataset2),
+        num_batches = len(dataset1),
         get_batch_fn = lambda: dataset2.next()[0],
         filename = 'mmap_file',
-        dtype = 'float32'
+        dtype = dtype
     )
 
-    mmap_mu2, mmap_sigma2 = fid.compute_statistics_mmapped(
-        params, 
-        apply_fn,
-        num_batches = len(dataset2),
-        get_batch_fn = lambda: dataset2.next()[0],
-        filename = 'mmap_file',
-        dtype = 'float32'
-    )
+    #mmap_mu2, mmap_sigma2 = fid.compute_statistics_mmapped(
+    #    params, 
+    #    apply_fn,
+    #    num_batches = len(dataset2),
+    #    get_batch_fn = lambda: dataset2.next()[0],
+    #    filename = 'mmap_file',
+    #    dtype = dtype
+    #)
     print(f'mmap_mu shape: {mmap_mu1.shape}, mmap_sigma shape: {mmap_sigma1.shape}')
+    exit(0)
 
     original_mu1, original_sigma1 = fid.compute_statistics(
         params, 

@@ -24,43 +24,56 @@ import mmap
 from PIL import Image
 
 def compute_statistics_mmapped(params, apply_fn, num_batches, get_batch_fn, filename, dtype):
+    assert num_batches > 0, "num_batches must be greater than 0"
+    
     activation_dim = 2048
     dtype_size = np.dtype(dtype).itemsize
-    size = dtype_size * activation_dim
+    activation_size = dtype_size * activation_dim
+    file_size = activation_size * num_batches
+    print(f'file size {file_size}')
+    print(f'activation size {activation_size}')
+    print(f'dtype size {dtype_size}')
+    print(f'num batches {num_batches}')
 
-    fd = os.open(filename, os.O_RDWR | os.O_CREAT)
-    os.ftruncate(fd, num_batches * activation_dim * np.dtype(dtype).itemsize)
-    fd.flush()
-    os.close(fd)
+    with open(filename, "w+b") as f:
+        f.write(b"\0" * file_size)
+        f.flush()
+        mm = mmap.mmap(f.fileno(), file_size)
 
-    with open(filename, "r+b") as f:
-        mm = mmap.mmap(f.fileno(), num_batches * np.dtype(np.float32).itemsize)
         activation_sum = np.zeros((1, activation_dim), dtype=dtype)
-
         for i in tqdm(range(num_batches)):
             x = get_batch_fn()
-            x = np.asarray(x)
+            x = np.asarray(x, dtype=dtype)
             x = 2 * x - 1
             activation = apply_fn(params, jax.lax.stop_gradient(x))
+            activation = activation.astype(dtype)
             activation_sum += activation
-            mm[i * size : (i + 1) * size] = activation.tobytes()
+            print(f'activation shape: {activation.shape}')
+            activation = activation.squeeze()
+            print(f'activation shape 2: {activation.shape}')
+            print(f'activation size bytes: {activation.size * activation.itemsize}')
+            for k, batch in enumerate(activation):
+                print(f'batch shape: {batch.shape}')
+                print(f'batch size bytes: {batch.size * batch.itemsize}')
+                print(f'batch number: {k}')
+                mm[(i + k) * activation_size : (i + k + 1) * activation_size] = batch.tobytes()
 
         mu = activation_sum / num_batches
 
-        sigma = np.zeros((activation_dim, activation_dim), dtype=dtype)
-        observations = np.zeros((2, activation_dim), dtype=dtype)
-        x_id = 0
-        y_id = 1
-        for x_id in range(activation_dim):
-            for y_id in range(activation_dim):
-                for i in range(num_batches):
-                    x_offset = i * size + x_id * dtype_size
-                    observations[0][i] = np.frombuffer(mm[x_offset : x_offset+dtype_size], dtype=dtype)
-                    y_offset = i * size + y_id * dtype_size
-                    observations[1][i] = np.frombuffer(mm[y_offset : y_offset+dtype_size], dtype=dtype)
-                sigma[x_id][y_id] = np.cov(observations)
+        #sigma = np.zeros((activation_dim, activation_dim), dtype=dtype)
+        #observations = np.zeros((2, activation_dim), dtype=dtype)
+        #x_id = 0
+        #y_id = 1
+        #for x_id in range(activation_dim):
+        #    for y_id in range(activation_dim):
+        #        for i in range(num_batches):
+        #            x_offset = i * size + x_id * dtype_size
+        #            observations[0][i] = np.frombuffer(mm[x_offset : x_offset+dtype_size], dtype=dtype)
+        #            y_offset = i * size + y_id * dtype_size
+        #            observations[1][i] = np.frombuffer(mm[y_offset : y_offset+dtype_size], dtype=dtype)
+        #        sigma[x_id][y_id] = np.cov(observations)
 
-    return mu, sigma
+    return mu, np.zeros((1))
 
 def compute_statistics(params, apply_fn, num_batches, get_batch_fn):
     activations = []
