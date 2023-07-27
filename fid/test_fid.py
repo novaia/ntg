@@ -4,6 +4,7 @@ from keras.preprocessing.image import ImageDataGenerator
 img_size = (256, 256)
 batch_size = 50
 dtype = 'float32'
+mmap_filename = '../data/temp/mmap_file'
 
 def get_iterator(path, data_generator):
     iterator = data_generator.flow_from_directory(
@@ -25,26 +26,28 @@ if __name__ == '__main__':
     dataset2 = get_iterator('../../heightmaps/fid_test2', idg)
     params, apply_fn = fid.get_inception_model()
 
+    '''
     mmap_mu1, mmap_sigma1 = fid.compute_statistics_mmapped(
         params, 
         apply_fn,
         num_batches = len(dataset1),
         batch_size = batch_size,
-        get_batch_fn = lambda: dataset2.next()[0],
-        filename = 'mmap_file',
+        get_batch_fn = lambda: dataset1.next()[0],
+        filename = mmap_filename,
         dtype = dtype
     )
 
-    #mmap_mu2, mmap_sigma2 = fid.compute_statistics_mmapped(
-    #    params, 
-    #    apply_fn,
-    #    num_batches = len(dataset2),
-    #    get_batch_fn = lambda: dataset2.next()[0],
-    #    filename = 'mmap_file',
-    #    dtype = dtype
-    #)
+    mmap_mu2, mmap_sigma2 = fid.compute_statistics_mmapped(
+        params, 
+        apply_fn,
+        num_batches = len(dataset2),
+        batch_size = batch_size,
+        get_batch_fn = lambda: dataset2.next()[0],
+        filename = mmap_filename,
+        dtype = dtype
+    )
     print(f'mmap_mu shape: {mmap_mu1.shape}, mmap_sigma shape: {mmap_sigma1.shape}')
-    exit(0)
+    '''
 
     original_mu1, original_sigma1 = fid.compute_statistics(
         params, 
@@ -55,15 +58,15 @@ if __name__ == '__main__':
     original_mu2, original_sigma2 = fid.compute_statistics(
         params, 
         apply_fn,
-        num_batches = len(dataset2),
-        get_batch_fn = lambda: dataset2.next()[0]
+        num_batches = len(dataset1),
+        get_batch_fn = lambda: dataset1.next()[0]
     )
-    print(f'original_mu shape: {mmap_mu1.shape}, original_sigma shape: {mmap_sigma1.shape}')
+    print(f'original_mu shape: {original_mu1.shape}, original_sigma shape: {original_sigma1.shape}')
 
-    mmap_fid = fid.calculate_frechet_distance(
-        mmap_mu1, mmap_sigma1, mmap_mu2, mmap_sigma2
-    )
-    print(f'mmap_fid: {mmap_fid}')
+    #mmap_fid = fid.compute_frechet_distance(
+    #    mmap_mu1, mmap_sigma1, mmap_mu2, mmap_sigma2
+    #)
+    #print(f'mmap_fid: {mmap_fid}')
 
     original_fid = fid.compute_frechet_distance(
         original_mu1, original_mu2, original_sigma1, original_sigma2
