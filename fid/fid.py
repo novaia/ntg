@@ -30,7 +30,8 @@ def compute_statistics_mmapped(
     assert batch_size > 0, "batch_size must be greater than 0"
     
     activation_dim = 2048
-    num_activations = num_batches * batch_size
+    #num_activations = num_batches * batch_size
+    num_activations = 0
     # _b suffix means the size is specifically the size of something in number of bytes,
     # as opposed to the size of something in number of elements.
     dtype_size_b = np.dtype(dtype).itemsize
@@ -42,22 +43,29 @@ def compute_statistics_mmapped(
         f.flush()
         mm = mmap.mmap(f.fileno(), file_size_b)
 
-        activation_sum = np.zeros((activation_dim), dtype=dtype)
+        #activation_sum = np.zeros((activation_dim), dtype=dtype)
+        activation_sum = np.zeros((activation_dim))
         for i in tqdm(range(num_batches)):
             x = get_batch_fn()
-            x = np.asarray(x, dtype=dtype)
+            #x = np.asarray(x, dtype=dtype)
+            #x = np.asarray(x)
             x = 2 * x - 1
             activation_batch = apply_fn(params, jax.lax.stop_gradient(x))
-            activation_batch = activation_batch.squeeze()
+            activation_batch = activation_batch.squeeze(axis=1).squeeze(axis=1)
 
             for k, activation in enumerate(activation_batch):
                 activation_sum += activation
+                num_activations += 1
                 start_index = (i + k) * activation_size_b
                 end_index = (i + k + 1) * activation_size_b
                 mm[start_index : end_index] = activation.tobytes()
 
+        print(f'activation_sum dtype: {activation_sum.dtype}')
         mu = activation_sum / num_activations
+        print(f'mu dtype: {mu.dtype}')
+        print(f'num activations mmap: {num_activations}')
 
+        '''
         sigma = np.zeros((activation_dim, activation_dim), dtype=dtype)
         observations = np.zeros((2, activation_dim), dtype=dtype)
         for a_id in tqdm(range(activation_dim)):
@@ -74,9 +82,10 @@ def compute_statistics_mmapped(
                         mm[b_offset : b_offset + dtype_size_b], dtype=dtype
                     )
                 # Only want cov(a, b), not the whole matrix.
-                sigma[a_id][b_id] = np.cov(observations)[0][1]
+                sigma[a_id][b_id] = np.cov(observations, bias=True)[0][1]
+        '''
 
-    return mu, sigma
+    return mu, np.zeros((1))
 
 def compute_statistics(params, apply_fn, num_batches, get_batch_fn):
     activations = []
@@ -88,7 +97,7 @@ def compute_statistics(params, apply_fn, num_batches, get_batch_fn):
         pred = apply_fn(params, jax.lax.stop_gradient(x))
         activations.append(pred.squeeze(axis=1).squeeze(axis=1))
     activations = jnp.concatenate(activations, axis=0)
-    print(f'activations shape: {activations.shape}')
+    print(f'num activations orig: {activations.shape[0]}')
 
     mu = np.mean(activations, axis=0)
     sigma = np.cov(activations, rowvar=False)
