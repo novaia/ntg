@@ -29,6 +29,7 @@ if __name__ == '__main__':
         params, 
         apply_fn,
         num_batches = len(dataset1),
+        batch_size = batch_size,
         get_batch_fn = lambda: dataset2.next()[0],
         filename = 'mmap_file',
         dtype = dtype
