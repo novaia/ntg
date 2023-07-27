@@ -88,6 +88,7 @@ def compute_statistics(params, apply_fn, num_batches, get_batch_fn):
         pred = apply_fn(params, jax.lax.stop_gradient(x))
         activations.append(pred.squeeze(axis=1).squeeze(axis=1))
     activations = jnp.concatenate(activations, axis=0)
+    print(f'activations shape: {activations.shape}')
 
     mu = np.mean(activations, axis=0)
     sigma = np.cov(activations, rowvar=False)
@@ -108,8 +109,10 @@ def compute_frechet_distance(mu1, mu2, sigma1, sigma2, eps=1e-6):
     sigma1 = np.atleast_1d(sigma1)
     sigma2 = np.atleast_1d(sigma2)
 
-    assert mu1.shape == mu2.shape
-    assert sigma1.shape == sigma2.shape
+    assertion_text = f'mu shapes must be the same but are {mu1.shape} and {mu2.shape}'
+    assert mu1.shape == mu2.shape, assertion_text
+    assertion_text = f'sigma shapes must be the same but are {sigma1.shape} and {sigma2.shape}'
+    assert sigma1.shape == sigma2.shape, assertion_text
 
     diff = mu1 - mu2
 
