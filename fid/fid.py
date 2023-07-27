@@ -48,16 +48,8 @@ def compute_statistics_mmapped(params, apply_fn, num_batches, batch_size, get_ba
             activation = apply_fn(params, jax.lax.stop_gradient(x))
             activation = activation.astype(dtype)
             activation_sum += activation
-            print(f'activation shape: {activation.shape}')
             activation = activation.squeeze()
-            print(f'activation shape 2: {activation.shape}')
-            print(f'activation size bytes: {activation.size * activation.itemsize}')
             for k, batch in enumerate(activation):
-                print(f'batch shape: {batch.shape}')
-                print(f'batch size bytes: {batch.size * batch.itemsize}')
-                print(f'batch number: {k}')
-                slice_size = ((i + k + 1) * activation_size) - ((i + k) * activation_size)
-                print(f'slice size: {slice_size}')
                 mm[(i + k) * activation_size : (i + k + 1) * activation_size] = batch.tobytes()
 
         mu = activation_sum / num_batches
