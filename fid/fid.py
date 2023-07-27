@@ -23,13 +23,13 @@ import mmap
 # temp
 from PIL import Image
 
-def compute_statistics_mmapped(params, apply_fn, num_batches, get_batch_fn, filename, dtype):
+def compute_statistics_mmapped(params, apply_fn, num_batches, batch_size, get_batch_fn, filename, dtype):
     assert num_batches > 0, "num_batches must be greater than 0"
     
     activation_dim = 2048
     dtype_size = np.dtype(dtype).itemsize
     activation_size = dtype_size * activation_dim
-    file_size = activation_size * num_batches
+    file_size = activation_size * num_batches * batch_size
     print(f'file size {file_size}')
     print(f'activation size {activation_size}')
     print(f'dtype size {dtype_size}')
@@ -56,6 +56,8 @@ def compute_statistics_mmapped(params, apply_fn, num_batches, get_batch_fn, file
                 print(f'batch shape: {batch.shape}')
                 print(f'batch size bytes: {batch.size * batch.itemsize}')
                 print(f'batch number: {k}')
+                slice_size = ((i + k + 1) * activation_size) - ((i + k) * activation_size)
+                print(f'slice size: {slice_size}')
                 mm[(i + k) * activation_size : (i + k + 1) * activation_size] = batch.tobytes()
 
         mu = activation_sum / num_batches
