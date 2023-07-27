@@ -23,51 +23,60 @@ import mmap
 # temp
 from PIL import Image
 
-def compute_statistics_mmapped(params, apply_fn, num_batches, batch_size, get_batch_fn, filename, dtype):
+def compute_statistics_mmapped(
+    params, apply_fn, num_batches, batch_size, get_batch_fn, filename, dtype
+):
     assert num_batches > 0, "num_batches must be greater than 0"
+    assert batch_size > 0, "batch_size must be greater than 0"
     
     activation_dim = 2048
-    dtype_size = np.dtype(dtype).itemsize
-    activation_size = dtype_size * activation_dim
-    file_size = activation_size * num_batches * batch_size
-    print(f'file size {file_size}')
-    print(f'activation size {activation_size}')
-    print(f'dtype size {dtype_size}')
-    print(f'num batches {num_batches}')
+    num_activations = num_batches * batch_size
+    # _b suffix means the size is specifically the size of something in number of bytes,
+    # as opposed to the size of something in number of elements.
+    dtype_size_b = np.dtype(dtype).itemsize
+    activation_size_b = dtype_size_b * activation_dim
+    file_size_b = activation_size_b * num_batches * batch_size
 
     with open(filename, "w+b") as f:
-        f.write(b"\0" * file_size)
+        f.write(b"\0" * file_size_b)
         f.flush()
-        mm = mmap.mmap(f.fileno(), file_size)
+        mm = mmap.mmap(f.fileno(), file_size_b)
 
-        activation_sum = np.zeros((1, activation_dim), dtype=dtype)
+        activation_sum = np.zeros((activation_dim), dtype=dtype)
         for i in tqdm(range(num_batches)):
             x = get_batch_fn()
             x = np.asarray(x, dtype=dtype)
             x = 2 * x - 1
-            activation = apply_fn(params, jax.lax.stop_gradient(x))
-            activation = activation.astype(dtype)
-            activation_sum += activation
-            activation = activation.squeeze()
-            for k, batch in enumerate(activation):
-                mm[(i + k) * activation_size : (i + k + 1) * activation_size] = batch.tobytes()
+            activation_batch = apply_fn(params, jax.lax.stop_gradient(x))
+            activation_batch = activation_batch.squeeze()
 
-        mu = activation_sum / num_batches
+            for k, activation in enumerate(activation_batch):
+                activation_sum += activation
+                start_index = (i + k) * activation_size_b
+                end_index = (i + k + 1) * activation_size_b
+                mm[start_index : end_index] = activation.tobytes()
 
-        #sigma = np.zeros((activation_dim, activation_dim), dtype=dtype)
-        #observations = np.zeros((2, activation_dim), dtype=dtype)
-        #x_id = 0
-        #y_id = 1
-        #for x_id in range(activation_dim):
-        #    for y_id in range(activation_dim):
-        #        for i in range(num_batches):
-        #            x_offset = i * size + x_id * dtype_size
-        #            observations[0][i] = np.frombuffer(mm[x_offset : x_offset+dtype_size], dtype=dtype)
-        #            y_offset = i * size + y_id * dtype_size
-        #            observations[1][i] = np.frombuffer(mm[y_offset : y_offset+dtype_size], dtype=dtype)
-        #        sigma[x_id][y_id] = np.cov(observations)
+        mu = activation_sum / num_activations
 
-    return mu, np.zeros((1))
+        sigma = np.zeros((activation_dim, activation_dim), dtype=dtype)
+        observations = np.zeros((2, activation_dim), dtype=dtype)
+        for a_id in tqdm(range(activation_dim)):
+            for b_id in range(activation_dim):
+
+                # Load the observations for variables a and b.
+                for i in range(num_activations):
+                    a_offset = i * activation_size_b + a_id * dtype_size_b
+                    observations[0][i] = np.frombuffer(
+                        mm[a_offset : a_offset + dtype_size_b], dtype=dtype
+                    )
+                    b_offset = i * activation_size_b + b_id * dtype_size_b
+                    observations[1][i] = np.frombuffer(
+                        mm[b_offset : b_offset + dtype_size_b], dtype=dtype
+                    )
+                # Only want cov(a, b), not the whole matrix.
+                sigma[a_id][b_id] = np.cov(observations)[0][1]
+
+    return mu, sigma
 
 def compute_statistics(params, apply_fn, num_batches, get_batch_fn):
     activations = []
