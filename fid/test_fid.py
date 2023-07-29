@@ -35,7 +35,16 @@ if __name__ == '__main__':
         filename = mmap_filename,
         dtype = dtype
     )
-    fid.save_statistics('../data/temp/mmap_stats.npz', mmap_mu1, mmap_sigma1)
+
+    mmap_mu2, mmap_sigma2 = fid.compute_statistics_mmapped(
+        params, 
+        apply_fn,
+        num_batches = len(dataset2),
+        batch_size = batch_size,
+        get_batch_fn = lambda: dataset2.next()[0],
+        filename = mmap_filename,
+        dtype = dtype
+    )
     print(f'mmap_mu shape: {mmap_mu1.shape}, mmap_sigma shape: {mmap_sigma1.shape}')
 
     original_mu1, original_sigma1 = fid.compute_statistics(
@@ -44,11 +53,20 @@ if __name__ == '__main__':
         num_batches = len(dataset1),
         get_batch_fn = lambda: dataset1.next()[0]
     )
-    fid.save_statistics('../data/temp/original_stats.npz', original_mu1, original_sigma1)
+    original_mu2, original_sigma2 = fid.compute_statistics(
+        params, 
+        apply_fn,
+        num_batches = len(dataset2),
+        get_batch_fn = lambda: dataset2.next()[0]
+    )
     print(f'original_mu shape: {original_mu1.shape}, original_sigma shape: {original_sigma1.shape}')
 
-    print(f'mmap_mu1 {mmap_mu1}')
-    print(f'original_mu1 {original_mu1}')
+    mmap_fid = fid.compute_frechet_distance(
+        mmap_mu1, mmap_mu2, mmap_sigma1, mmap_sigma2
+    )
+    print(f'mmap_fid: {mmap_fid}')
 
-    print(f'mmap_sigma1 {mmap_sigma1[0]}')
-    print(f'original_sigma1 {original_sigma1[0]}')
+    original_fid = fid.compute_frechet_distance(
+        original_mu1, original_mu2, original_sigma1, original_sigma2
+    )
+    print(f'original_fid: {original_fid}')
