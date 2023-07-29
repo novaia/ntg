@@ -49,3 +49,6 @@ if __name__ == '__main__':
 
     print(f'mmap_mu1 {mmap_mu1}')
     print(f'original_mu1 {original_mu1}')
+
+    print(f'mmap_sigma1 {mmap_sigma1[0]}')
+    print(f'original_sigma1 {original_sigma1[0]}')
