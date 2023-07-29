@@ -30,8 +30,7 @@ def compute_statistics_mmapped(
     assert batch_size > 0, "batch_size must be greater than 0"
     
     activation_dim = 2048
-    # _b suffix means the size is specifically the size of something in number of bytes,
-    # as opposed to the size of something in number of elements.
+    # _b suffix means the size is specifically the size of something in number of bytes.
     dtype_size_b = np.dtype(dtype).itemsize
     activation_size_b = dtype_size_b * activation_dim
     batch_size_b = activation_size_b * batch_size
@@ -51,19 +50,15 @@ def compute_statistics_mmapped(
             activation_batch = apply_fn(params, jax.lax.stop_gradient(x))
             activation_batch = activation_batch.squeeze(axis=1).squeeze(axis=1)
 
+            batch_offset = i * batch_size_b
             for k, activation in enumerate(activation_batch):
                 activation_sum += activation
                 num_activations += 1
-                #start_index = (i + k) * activation_size_b
-                #end_index = (i + k + 1) * activation_size_b
-                # i = 0, k = 1 -> 0 + 1
-                # i = 1, k = 0 -> 1 + 0
-                batch_offset = i * batch_size_b
                 start_index = batch_offset + k * activation_size_b
-                end_index = batch_offset + (k + 1) * activation_size_b
+                end_index = start_index + activation_size_b
                 mm[start_index : end_index] = activation.tobytes()
+
         mu = activation_sum / num_activations
-        
         sigma = np.zeros((activation_dim, activation_dim))
         observations = np.zeros((2, num_activations))
         for a_id in tqdm(range(activation_dim)):
@@ -82,7 +77,6 @@ def compute_statistics_mmapped(
                         mm[b_offset : b_offset + dtype_size_b], dtype=dtype
                     )
                 # Only want cov(a, b), not the whole matrix.
-                #sigma[a_id][b_id] = np.cov(observations, bias=True)[0][1]
                 sigma[a_id][b_id] = np.cov(observations)[0][1]
 
     return mu, sigma
