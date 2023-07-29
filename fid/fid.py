@@ -23,101 +23,30 @@ import mmap
 # temp
 from PIL import Image
 
-def compute_statistics_mmapped_experimental(
-    params, apply_fn, num_batches, batch_size, get_batch_fn, filename, dtype, num_activations
-):
-    assert num_batches > 0, "num_batches must be greater than 0"
-    assert batch_size > 0, "batch_size must be greater than 0"
-    
-    activation_dim = 2048
-    # _b suffix means the size is specifically the size of something in number of bytes.
-    #dtype_size_b = np.dtype(dtype).itemsize
-    #activation_size_b = dtype_size_b * activation_dim
-    #file_size_b = activation_size_b * num_batches * batch_size
-
-    with open(filename, "w+b") as f:
-        #f.write(b"\0" * file_size_b)
-        #f.flush()
-        # Create a memory-mapped array from the file
-        mm = np.memmap(f, dtype=dtype, mode='r+', shape=(num_activations, activation_dim))
-
-        activation_sum = np.zeros((activation_dim))
-        for i in tqdm(range(num_batches)):
-            x = get_batch_fn()
-            x = np.asarray(x)
-            x = 2 * x - 1
-            activation_batch = apply_fn(params, jax.lax.stop_gradient(x))
-            activation_batch = activation_batch.squeeze(axis=1).squeeze(axis=1)
-
-            current_batch_size = activation_batch.shape[0]
-            # Write the activation batch to the memory-mapped array using slicing
-            start_index = i * batch_size
-            end_index = start_index + current_batch_size
-            mm[start_index : end_index] = activation_batch
-
-            # Update the activation sum and count
-            activation_sum += activation_batch.sum(axis=0)
-
-        mu = activation_sum / num_activations
-        sigma = np.cov(mm, rowvar=False)
-
-    return mu, sigma
-
 def compute_statistics_mmapped(
-    params, apply_fn, num_batches, batch_size, get_batch_fn, filename, dtype
-):
-    assert num_batches > 0, "num_batches must be greater than 0"
-    assert batch_size > 0, "batch_size must be greater than 0"
-    
+    params, apply_fn, num_batches, batch_size, 
+    get_batch_fn, filename, dtype, num_activations
+):    
     activation_dim = 2048
-    # _b suffix means the size is specifically the size of something in number of bytes.
-    dtype_size_b = np.dtype(dtype).itemsize
-    activation_size_b = dtype_size_b * activation_dim
-    batch_size_b = activation_size_b * batch_size
-    file_size_b = activation_size_b * num_batches * batch_size
+    mm = np.memmap(filename, dtype=dtype, mode='w+', shape=(num_activations, activation_dim))
 
-    with open(filename, "w+b") as f:
-        f.write(b"\0" * file_size_b)
-        f.flush()
-        mm = mmap.mmap(f.fileno(), file_size_b)
+    activation_sum = np.zeros((activation_dim))
+    for i in tqdm(range(num_batches)):
+        x = get_batch_fn()
+        x = np.asarray(x)
+        x = 2 * x - 1
+        activation_batch = apply_fn(params, jax.lax.stop_gradient(x))
+        activation_batch = activation_batch.squeeze(axis=1).squeeze(axis=1)
 
-        num_activations = 0
-        activation_sum = np.zeros((activation_dim))
-        for i in tqdm(range(num_batches)):
-            x = get_batch_fn()
-            x = np.asarray(x)
-            x = 2 * x - 1
-            activation_batch = apply_fn(params, jax.lax.stop_gradient(x))
-            activation_batch = activation_batch.squeeze(axis=1).squeeze(axis=1)
+        current_batch_size = activation_batch.shape[0]
+        start_index = i * batch_size
+        end_index = start_index + current_batch_size
+        mm[start_index : end_index] = activation_batch
 
-            batch_offset = i * batch_size_b
-            for k, activation in enumerate(activation_batch):
-                activation_sum += activation
-                num_activations += 1
-                start_index = batch_offset + k * activation_size_b
-                end_index = start_index + activation_size_b
-                mm[start_index : end_index] = activation.tobytes()
+        activation_sum += activation_batch.sum(axis=0)
 
-        mu = activation_sum / num_activations
-        sigma = np.zeros((activation_dim, activation_dim))
-        observations = np.zeros((2, num_activations))
-        for a_id in tqdm(range(activation_dim)):
-            for b_id in range(activation_dim):
-
-                # Load the observations for variables a and b.
-                for i in range(num_activations):
-                    row_offset = i * activation_size_b
-                    a_offset = row_offset + a_id * dtype_size_b
-                    b_offset = row_offset + b_id * dtype_size_b
-                    
-                    observations[0][i] = np.frombuffer(
-                        mm[a_offset : a_offset + dtype_size_b], dtype=dtype
-                    )
-                    observations[1][i] = np.frombuffer(
-                        mm[b_offset : b_offset + dtype_size_b], dtype=dtype
-                    )
-                # Only want cov(a, b), not the whole matrix.
-                sigma[a_id][b_id] = np.cov(observations)[0][1]
+    mu = activation_sum / num_activations
+    sigma = np.cov(mm, rowvar=False)
 
     return mu, sigma
 

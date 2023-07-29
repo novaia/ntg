@@ -26,7 +26,7 @@ if __name__ == '__main__':
     dataset2 = get_iterator('../../heightmaps/fid_test2', idg)
     params, apply_fn = fid.get_inception_model()
 
-    mmap_mu1, mmap_sigma1 = fid.compute_statistics_mmapped_experimental(
+    mmap_mu1, mmap_sigma1 = fid.compute_statistics_mmapped(
         params, 
         apply_fn,
         num_batches = len(dataset1),
@@ -34,10 +34,10 @@ if __name__ == '__main__':
         get_batch_fn = lambda: dataset1.next()[0],
         filename = mmap_filename,
         dtype = dtype,
-        num_activations = 63
+        num_activations = dataset1.samples
     )
 
-    mmap_mu2, mmap_sigma2 = fid.compute_statistics_mmapped_experimental(
+    mmap_mu2, mmap_sigma2 = fid.compute_statistics_mmapped(
         params, 
         apply_fn,
         num_batches = len(dataset2),
@@ -45,7 +45,7 @@ if __name__ == '__main__':
         get_batch_fn = lambda: dataset2.next()[0],
         filename = mmap_filename,
         dtype = dtype,
-        num_activations = 133
+        num_activations = dataset2.samples
     )
     print(f'mmap_mu shape: {mmap_mu1.shape}, mmap_sigma shape: {mmap_sigma1.shape}')
 
