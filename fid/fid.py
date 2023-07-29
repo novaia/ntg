@@ -23,6 +23,46 @@ import mmap
 # temp
 from PIL import Image
 
+def compute_statistics_mmapped_experimental(
+    params, apply_fn, num_batches, batch_size, get_batch_fn, filename, dtype, num_activations
+):
+    assert num_batches > 0, "num_batches must be greater than 0"
+    assert batch_size > 0, "batch_size must be greater than 0"
+    
+    activation_dim = 2048
+    # _b suffix means the size is specifically the size of something in number of bytes.
+    #dtype_size_b = np.dtype(dtype).itemsize
+    #activation_size_b = dtype_size_b * activation_dim
+    #file_size_b = activation_size_b * num_batches * batch_size
+
+    with open(filename, "w+b") as f:
+        #f.write(b"\0" * file_size_b)
+        #f.flush()
+        # Create a memory-mapped array from the file
+        mm = np.memmap(f, dtype=dtype, mode='r+', shape=(num_activations, activation_dim))
+
+        activation_sum = np.zeros((activation_dim))
+        for i in tqdm(range(num_batches)):
+            x = get_batch_fn()
+            x = np.asarray(x)
+            x = 2 * x - 1
+            activation_batch = apply_fn(params, jax.lax.stop_gradient(x))
+            activation_batch = activation_batch.squeeze(axis=1).squeeze(axis=1)
+
+            current_batch_size = activation_batch.shape[0]
+            # Write the activation batch to the memory-mapped array using slicing
+            start_index = i * batch_size
+            end_index = start_index + current_batch_size
+            mm[start_index : end_index] = activation_batch
+
+            # Update the activation sum and count
+            activation_sum += activation_batch.sum(axis=0)
+
+        mu = activation_sum / num_activations
+        sigma = np.cov(mm, rowvar=False)
+
+    return mu, sigma
+
 def compute_statistics_mmapped(
     params, apply_fn, num_batches, batch_size, get_batch_fn, filename, dtype
 ):
