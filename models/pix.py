@@ -2,10 +2,13 @@
 This is the model and training code for
 Pix: a denoising diffusion implicit model (DDIM).
 '''
-import sys
-sys.path.append('../')
-
 import os
+import pathlib
+import sys
+project_root = str(pathlib.Path(__file__).parent.resolve().parent.resolve())
+if project_root not in sys.path: sys.path.append(project_root)
+os.chdir(project_root)
+
 import math
 from datetime import datetime
 from typing import Any
@@ -15,9 +18,10 @@ import optax # Optimizers.
 #import orbax.checkpoint 
 import jax
 import jax.numpy as jnp
+#import fid
+import fid
+from inference import reverse_diffusion
 from keras.preprocessing.image import ImageDataGenerator
-from fid import fid
-from inference.reverse_diffusion import reverse_diffusion
 
 starting_epoch = 0 # 0 if training from scratch.
 data_path = '../../heightmaps/uncorrupted_split_heightmaps_second_pass'
@@ -206,7 +210,8 @@ def fid_benchmark(apply_fn, params, batch_stats):
             channels=1, 
             diffusion_schedule_fn=diffusion_schedule,
         )
-        all_samples.append(samples)
+        # FID requires 3 channels.
+        all_samples.append(samples.repeat(3, axis=-1))
     end_time = datetime.now()
     delta_time = end_time - start_time
     print('sampling time:', delta_time)
@@ -225,7 +230,9 @@ def fid_benchmark(apply_fn, params, batch_stats):
     sample_generator = SampleGenerator(all_samples)
 
     params, apply_fn = fid.get_inception_model()
-    mu1, sigma1 = fid.compute_statistics(params, apply_fn, len(all_samples), lambda: next(sample_generator))
+    mu1, sigma1 = fid.compute_statistics(
+        params, apply_fn, len(all_samples), lambda: next(sample_generator)
+    )
     mu2, sigma2 = fid.load_statistics('../data/dataset_info/stats.npz')
     fid_value = fid.calculate_frechet_distance(mu1, sigma1, mu2, sigma2)
     print('FID:', fid_value)
