@@ -9,7 +9,9 @@ project_root = str(pathlib.Path(__file__).parent.resolve().parent.resolve())
 if project_root not in sys.path: sys.path.append(project_root)
 os.chdir(project_root)
 
+import argparse
 import math
+import functools
 from datetime import datetime
 from typing import Any
 import flax.linen as nn
@@ -194,16 +196,17 @@ def train_step(state, images, parent_key):
     state = state.replace(batch_stats=updates['batch_stats'])
     return loss, state
 
-def fid_benchmark(apply_fn, params, batch_stats):
-    start_time = datetime.now()
-    print('sampling')
-    all_samples = []
-    for _ in range(50):
+def fid_benchmark(apply_fn, params, batch_stats, stats_path, batch_size, num_samples):
+    batch_size = 20
+    num_samples = 5000
+    num_batches = num_samples // batch_size
+
+    def get_sample_batch(apply_fn, params, batch_stats, batch_size):
         samples = reverse_diffusion(
             apply_fn=apply_fn, 
             params=params,
             batch_stats=batch_stats, 
-            num_images=20, 
+            num_images=batch_size, 
             diffusion_steps=10, 
             image_height=256, 
             image_width=256, 
@@ -211,33 +214,42 @@ def fid_benchmark(apply_fn, params, batch_stats):
             diffusion_schedule_fn=diffusion_schedule,
         )
         # FID requires 3 channels.
-        all_samples.append(samples.repeat(3, axis=-1))
-    end_time = datetime.now()
-    delta_time = end_time - start_time
-    print('sampling time:', delta_time)
-    print('num samples:', len(all_samples) * 20)
-
-    class SampleGenerator:
-        def __init__(self, samples):
-            self.samples = samples
-            self.index = 0
-
-        def __next__(self):
-            next_sample = self.samples[self.index]
-            self.index += 1
-            if self.index == len(self.samples): self.index = 0
-            return next_sample
-    sample_generator = SampleGenerator(all_samples)
+        return samples.repeat(3, axis=-1)
+    get_batch_fn = functools.partial(
+        get_sample_batch, apply_fn, params, batch_stats, batch_size
+    )
 
     params, apply_fn = fid.get_inception_model()
-    mu1, sigma1 = fid.compute_statistics(
-        params, apply_fn, len(all_samples), lambda: next(sample_generator)
+    mu1, sigma1 = fid.compute_statistics_with_mmap(
+        params = params, 
+        apply_fn = apply_fn, 
+        num_batches = num_batches,
+        batch_size = batch_size, 
+        get_batch_fn = get_batch_fn,
+        filename = 'data/temp/mmap_file',
+        dtype = 'float32', 
+        num_activations = num_samples
     )
-    mu2, sigma2 = fid.load_statistics('../data/dataset_info/stats.npz')
-    fid_value = fid.calculate_frechet_distance(mu1, sigma1, mu2, sigma2)
+    mu2, sigma2 = fid.load_statistics(stats_path)
+    fid_value = fid.compute_frechet_distance(mu1, mu2, sigma1, sigma2)
     print('FID:', fid_value)
+    return fid_value
 
 if __name__ == '__main__':
+    parser = argparse.ArgumentParser()
+    help_text = 'If true, use FID to benchmark model at the end of every epoch.'
+    parser.add_argument('--use_fid', type=bool, default=True, help=help_text)
+    help_text = 'Path to file containing precomputed FID stats for training dataset.'
+    parser.add_argument('--fid_stats_path', type=str, help=help_text)
+    help_text = 'Batch size for generating FID samples.'
+    parser.add_argument('--fid_batch_size', type=int, help=help_text)
+    help_text = 'Number of samples to generate for FID benchmark.'
+    parser.add_argument('--num_fid_samples', type=int, help=help_text)
+    args = parser.parse_args()
+
+    if args.use_fid:
+        fid.check_for_correct_setup(args.fid_stats_path)
+
     print('GPU:', jax.devices('gpu'))
 
     init_rng = jax.random.PRNGKey(0)
@@ -245,7 +257,14 @@ if __name__ == '__main__':
     state = create_train_state(model, init_rng, learning_rate)
     del init_rng
 
-    fid_benchmark(state.apply_fn, state.params, state.batch_stats)
+    fid_benchmark(
+        apply_fn = state.apply_fn, 
+        params = state.params, 
+        batch_stats = state.batch_stats, 
+        stats_path = args.fid_stats_path,
+        batch_size = args.fid_batch_size,
+        num_samples = args.num_fid_samples
+    )
     exit(0)
 
     checkpointer = orbax.checkpoint.PyTreeCheckpointer()
