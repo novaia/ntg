@@ -17,19 +17,19 @@ from typing import Any
 import flax.linen as nn
 from flax.training import train_state
 import optax # Optimizers.
-#import orbax.checkpoint 
+import orbax.checkpoint
 import jax
 import jax.numpy as jnp
-#import fid
 import fid
 from inference import reverse_diffusion
 from keras.preprocessing.image import ImageDataGenerator
 
-starting_epoch = 0 # 0 if training from scratch.
-data_path = '../../heightmaps/uncorrupted_split_heightmaps_second_pass'
-model_save_path = '../data/models/diffusion_models/'
+start_epoch = 0 # 0 if training from scratch.
+dataset_path = '../heightmaps/world-heightmaps-01/'
+model_save_path = 'data/pix_checkpoints/'
 model_name = 'pix'
-image_save_path = '../data/images/'
+image_save_path = 'data/images/'
+log_path = 'data/logs/pix.csv'
 
 # Sampling.
 min_signal_rate = 0.02
@@ -45,12 +45,19 @@ block_depth = 2
 ema = 0.999
 learning_rate = 1e-3
 weight_decay = 1e-4
+epochs = 4
 
 # Input.
 batch_size = 8
 image_width = 256
 image_height = 256
 channels = 1
+
+# Benchmarking.
+use_fid = True
+fid_stats_path = 'data/dataset_info/world-heightmaps-01-stats.npz'
+fid_batch_size = 20
+num_fid_samples = 5000
 
 def preprocessing_function(image):
     image = image.astype(float) / 255
@@ -160,13 +167,16 @@ def diffusion_schedule(diffusion_times):
 class TrainState(train_state.TrainState):
     batch_stats: Any
 
-def create_train_state(module, rng, learning_rate):
+def create_train_state(module, rng, learning_rate, image_width, image_height):
     x = (jnp.ones([1, image_width, image_height, 1]), jnp.ones([1, 1, 1, 1]))
     variables = module.init(rng, x, True)
     params = variables['params']
     batch_stats = variables['batch_stats']
     tx = optax.adam(learning_rate)
-    return TrainState.create(apply_fn=module.apply, params=params, tx=tx, batch_stats=batch_stats)
+    train_state = TrainState.create(
+        apply_fn=module.apply, params=params, tx=tx, batch_stats=batch_stats
+    )
+    return train_state
 
 @jax.jit
 def train_step(state, images, parent_key):
@@ -174,7 +184,9 @@ def train_step(state, images, parent_key):
     batch_size = len(images)
     
     def loss_fn(params):
-        noises = jax.random.normal(noise_key, (batch_size, image_width, image_height, channels))
+        noises = jax.random.normal(
+            noise_key, (batch_size, images.shape[1], images.shape[2], channels)
+        )
         diffusion_times = jax.random.uniform(diffusion_time_key, (batch_size, 1, 1, 1))
         noise_rates, signal_rates = diffusion_schedule(diffusion_times)
         noisy_images = signal_rates * images + noise_rates * noises
@@ -197,8 +209,6 @@ def train_step(state, images, parent_key):
     return loss, state
 
 def fid_benchmark(apply_fn, params, batch_stats, stats_path, batch_size, num_samples):
-    batch_size = 20
-    num_samples = 5000
     num_batches = num_samples // batch_size
 
     def get_sample_batch(apply_fn, params, batch_stats, batch_size):
@@ -232,63 +242,77 @@ def fid_benchmark(apply_fn, params, batch_stats, stats_path, batch_size, num_sam
     )
     mu2, sigma2 = fid.load_statistics(stats_path)
     fid_value = fid.compute_frechet_distance(mu1, mu2, sigma1, sigma2)
-    print('FID:', fid_value)
     return fid_value
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
+    help_text = 'Epoch to start from when resuming training. Starts from scratch if 0.'
+    parser.add_argument('--start_epoch', type=int, default=start_epoch, help=help_text)
+    help_text = 'Path to training dataset.'
+    parser.add_argument('--dataset_path', type=str, default=dataset_path, help=help_text)
+    help_text = 'Path to directory where model checkpoints are saved.'
+    parser.add_argument('--model_save_path', type=str, default=model_save_path, help=help_text)
+    help_text = 'Name of the model. Used for naming checkpoints and training logs.'
+    parser.add_argument('--model_name', type=str, default=model_name, help=help_text)
+    help_text = 'Path to directory where images generated at the end of each epoch are saved.'
+    parser.add_argument('--image_save_path', type=str, default=image_save_path, help=help_text)
+    help_text = 'Path to log file.'
+    parser.add_argument('--log_file', type=str, default=log_path, help=help_text)
+    help_text = 'Batch size for training.'
+    parser.add_argument('--batch_size', type=int, default=batch_size, help=help_text)
+    help_text = 'Number of epochs to train for.'
+    parser.add_argument('--epochs', type=int, default=epochs, help=help_text)
+    help_text = 'Width of image to load from dataset.'
+    parser.add_argument('--image_width', type=int, default=image_width, help=help_text)
+    help_text = 'Height of image to load from dataset.'
+    parser.add_argument('--image_height', type=int, default=image_height, help=help_text)
     help_text = 'If true, use FID to benchmark model at the end of every epoch.'
-    parser.add_argument('--use_fid', type=bool, default=True, help=help_text)
+    parser.add_argument('--use_fid', type=bool, default=use_fid, help=help_text)
     help_text = 'Path to file containing precomputed FID stats for training dataset.'
-    parser.add_argument('--fid_stats_path', type=str, help=help_text)
+    parser.add_argument('--fid_stats_path', type=str, default=fid_stats_path, help=help_text)
     help_text = 'Batch size for generating FID samples.'
-    parser.add_argument('--fid_batch_size', type=int, help=help_text)
+    parser.add_argument('--fid_batch_size', type=int, default=fid_batch_size, help=help_text)
     help_text = 'Number of samples to generate for FID benchmark.'
-    parser.add_argument('--num_fid_samples', type=int, help=help_text)
+    parser.add_argument('--num_fid_samples', type=int, default=num_fid_samples, help=help_text)
     args = parser.parse_args()
 
     if args.use_fid:
         fid.check_for_correct_setup(args.fid_stats_path)
 
+    if not os.path.isfile(args.log_file):
+        with open(args.log_file, 'w+') as f:
+            f.write('epoch,loss,fid\n')
+
     print('GPU:', jax.devices('gpu'))
 
     init_rng = jax.random.PRNGKey(0)
     model = DDIM(widths, block_depth)
-    state = create_train_state(model, init_rng, learning_rate)
+    state = create_train_state(
+        model, init_rng, learning_rate, args.image_width, args.image_height
+    )
     del init_rng
 
-    fid_benchmark(
-        apply_fn = state.apply_fn, 
-        params = state.params, 
-        batch_stats = state.batch_stats, 
-        stats_path = args.fid_stats_path,
-        batch_size = args.fid_batch_size,
-        num_samples = args.num_fid_samples
-    )
-    exit(0)
-
     checkpointer = orbax.checkpoint.PyTreeCheckpointer()
-    if starting_epoch != 0:
-        checkpoint_path = model_save_path + model_name + '_epoch' + str(starting_epoch - 1)
+    if args.start_epoch != 0:
+        checkpoint_path = (
+            args.model_save_path + args.model_name + '_epoch' + str(args.start_epoch - 1)
+        )
         state = checkpointer.restore(checkpoint_path, state)
 
     idg = ImageDataGenerator(preprocessing_function = preprocessing_function)
     heightmap_iterator = idg.flow_from_directory(
-        data_path, 
-        target_size = (image_height, image_width), 
-        batch_size = batch_size,
+        args.dataset_path, 
+        target_size = (args.image_height, args.image_width), 
+        batch_size = args.batch_size,
         color_mode = 'grayscale',
         classes = ['']
     )
-
-    epochs = 3
     steps_per_epoch = len(heightmap_iterator)
 
-    losses = []
-    for epoch in range(epochs):
+    for epoch in range(args.epochs):
         epoch_start_time = datetime.now()
 
-        losses_this_epoch = []
+        losses = []
         for step in range(steps_per_epoch):
             images = jnp.asarray(heightmap_iterator.next()[0])
             
@@ -297,13 +321,13 @@ if __name__ == '__main__':
             
             train_step_key = jax.random.PRNGKey(epoch * steps_per_epoch + step)
             loss, state = train_step(state, images, train_step_key)
-            losses_this_epoch.append(loss)
-        losses.append(sum(losses_this_epoch) / len(losses_this_epoch))
+            losses.append(loss)
+        average_loss = sum(losses) / len(losses)
 
         epoch_end_time = datetime.now()
         epoch_delta_time = epoch_end_time - epoch_start_time
         simple_epoch_end_time = str(epoch_end_time.hour) + ':' + str(epoch_end_time.minute)
-        absolute_epoch = starting_epoch + epoch
+        absolute_epoch = args.start_epoch + epoch
 
         print(
             'Epoch', 
@@ -313,7 +337,20 @@ if __name__ == '__main__':
             'in', 
             str(epoch_delta_time)
         )
+        print(f'Loss: {average_loss}')
 
         save_name = model_save_path + model_name + '_epoch' + str(absolute_epoch+1)
         checkpointer.save(save_name, state)
-    print('losses', losses)
+
+        fid_value = fid_benchmark(
+            apply_fn = state.apply_fn, 
+            params = state.params, 
+            batch_stats = state.batch_stats, 
+            stats_path = args.fid_stats_path,
+            batch_size = args.fid_batch_size,
+            num_samples = args.num_fid_samples
+        )
+        print('FID:', fid_value)
+        
+        with open(args.log_file, 'a') as f:
+            f.write(f'{absolute_epoch},{average_loss},{fid_value}\n')
