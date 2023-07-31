@@ -50,7 +50,6 @@ def compute_statistics(params, apply_fn, num_batches, get_batch_fn):
         pred = apply_fn(params, jax.lax.stop_gradient(x))
         activations.append(pred.squeeze(axis=1).squeeze(axis=1))
     activations = jnp.concatenate(activations, axis=0)
-    print(f'num activations orig: {activations.shape[0]}')
 
     mu = np.mean(activations, axis=0)
     sigma = np.cov(activations, rowvar=False)
@@ -108,3 +107,16 @@ def get_inception_model():
 def preprocessing_function(image):
     image = image.astype(float) / 255
     return image
+
+# Checks if FID has been setup correctly.
+# Useful to catch errors before training.
+def check_for_correct_setup(fid_stats_path=None):
+    assertion_text = 'Must specify path to FID stats file if using FID.'
+    assert fid_stats_path is not None, assertion_text
+    assertion_text = f'FID stats file does not exist at {fid_stats_path}'
+    assert os.path.isfile(fid_stats_path), assertion_text
+    assertion_text = 'FID stats file must be a .npz file.'
+    assert fid_stats_path.endswith('.npz'), assertion_text
+    inception = get_inception_model()
+    assertion_text = 'Failed to load Inception model.'
+    assert inception is not None, assertion_text
