@@ -344,14 +344,6 @@ if __name__ == '__main__':
     else:
         print('Starting training from scratch')
 
-    #checkpoint_name = get_checkpoint_name(args.model_name, 1)
-    #save_checkpoint(checkpointer, state, args.model_save_path, checkpoint_name, args.docker)
-    #print(f'Saved checkpoint')
-    #checkpoint_path = os.path.join(args.model_save_path, checkpoint_name)
-    #state = checkpointer.restore(os.path.abspath(checkpoint_path))
-    #print(f'Restored checkpoint')
-    #exit(0)
-
     idg = ImageDataGenerator(preprocessing_function = preprocessing_function)
     heightmap_iterator = idg.flow_from_directory(
         args.dataset_path, 
