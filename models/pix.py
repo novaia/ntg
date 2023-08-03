@@ -10,6 +10,7 @@ if project_root not in sys.path: sys.path.append(project_root)
 os.chdir(project_root)
 
 import argparse
+import shutil
 import math
 import functools
 from datetime import datetime
@@ -17,7 +18,7 @@ from typing import Any
 import flax.linen as nn
 from flax.training import train_state
 import optax # Optimizers.
-import orbax.checkpoint
+import orbax.checkpoint as ocp
 import jax
 import jax.numpy as jnp
 import fid
@@ -30,6 +31,7 @@ model_save_path = 'data/pix_checkpoints/'
 model_name = 'pix'
 image_save_path = 'data/images/'
 log_path = 'data/logs/pix.csv'
+in_docker_container = True
 
 # Sampling.
 min_signal_rate = 0.02
@@ -45,7 +47,7 @@ block_depth = 2
 ema = 0.999
 learning_rate = 1e-3
 weight_decay = 1e-4
-epochs = 4
+epochs = 100
 
 # Input.
 batch_size = 8
@@ -244,6 +246,23 @@ def fid_benchmark(apply_fn, params, batch_stats, stats_path, batch_size, num_sam
     fid_value = fid.compute_frechet_distance(mu1, mu2, sigma1, sigma2)
     return fid_value
 
+def save_checkpoint(
+    checkpointer, state, model_save_path, checkpoint_name, in_docker_container
+):
+    final_save_path = os.path.join(model_save_path, checkpoint_name)
+    if in_docker_container:
+        # To read why this is necessary, see: https://github.com/google/orbax/issues/446
+        # Save to root owned checkpoints dir.
+        temp_save_path = os.path.abspath(os.path.join('../checkpoints', checkpoint_name))
+        checkpointer.save(os.path.abspath(temp_save_path), state)
+        # Copy from root owned checkpoints dir, to checkpoints dir in mounted volume.
+        shutil.copytree(temp_save_path, final_save_path)
+    else:
+        checkpointer.save(final_save_path, state)
+
+def get_checkpoint_name(model_name, epoch):
+    return f'{model_name}_epoch{epoch}'
+
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     help_text = 'Epoch to start from when resuming training. Starts from scratch if 0.'
@@ -274,7 +293,10 @@ if __name__ == '__main__':
     parser.add_argument('--fid_batch_size', type=int, default=fid_batch_size, help=help_text)
     help_text = 'Number of samples to generate for FID benchmark.'
     parser.add_argument('--num_fid_samples', type=int, default=num_fid_samples, help=help_text)
+    help_text = 'If true, the program will expect to be running inside a docker container.'
+    parser.add_argument('--docker', type=bool, default=in_docker_container, help=help_text)
     args = parser.parse_args()
+    print('GPU:', jax.devices('gpu'))
 
     if args.use_fid:
         fid.check_for_correct_setup(args.fid_stats_path)
@@ -283,8 +305,6 @@ if __name__ == '__main__':
         with open(args.log_file, 'w+') as f:
             f.write('epoch,loss,fid\n')
 
-    print('GPU:', jax.devices('gpu'))
-
     init_rng = jax.random.PRNGKey(0)
     model = DDIM(widths, block_depth)
     state = create_train_state(
@@ -292,12 +312,22 @@ if __name__ == '__main__':
     )
     del init_rng
 
-    checkpointer = orbax.checkpoint.PyTreeCheckpointer()
+    checkpointer = ocp.Checkpointer(ocp.PyTreeCheckpointHandler(use_ocdbt=True))
     if args.start_epoch != 0:
-        checkpoint_path = (
-            args.model_save_path + args.model_name + '_epoch' + str(args.start_epoch - 1)
-        )
-        state = checkpointer.restore(checkpoint_path, state)
+        checkpoint_name = get_checkpoint_name(args.model_name, args.start_epoch)
+        checkpoint_path = os.path.join(args.model_save_path, checkpoint_name)
+        state = checkpointer.restore(os.path.abspath(checkpoint_path))
+        print(f'Resuming training from epoch {args.start_epoch}')
+    else:
+        print('Starting training from scratch')
+    
+    #checkpoint_name = get_checkpoint_name(args.model_name, 1)
+    #save_checkpoint(checkpointer, state, args.model_save_path, checkpoint_name, args.docker)
+    #print(f'Saved checkpoint')
+    #checkpoint_path = os.path.join(args.model_save_path, checkpoint_name)
+    #state = checkpointer.restore(os.path.abspath(checkpoint_path))
+    #print(f'Restored checkpoint')
+    #exit(0)
 
     idg = ImageDataGenerator(preprocessing_function = preprocessing_function)
     heightmap_iterator = idg.flow_from_directory(
@@ -327,7 +357,7 @@ if __name__ == '__main__':
         epoch_end_time = datetime.now()
         epoch_delta_time = epoch_end_time - epoch_start_time
         simple_epoch_end_time = str(epoch_end_time.hour) + ':' + str(epoch_end_time.minute)
-        absolute_epoch = args.start_epoch + epoch
+        absolute_epoch = args.start_epoch + epoch + 1
 
         print(
             'Epoch', 
@@ -339,8 +369,14 @@ if __name__ == '__main__':
         )
         print(f'Loss: {average_loss}')
 
-        save_name = model_save_path + model_name + '_epoch' + str(absolute_epoch+1)
-        checkpointer.save(save_name, state)
+        checkpoint_name = get_checkpoint_name(args.model_name, absolute_epoch)
+        save_checkpoint(
+            checkpointer = checkpointer, 
+            state = state, 
+            model_save_path = args.model_save_path, 
+            checkpoint_name = checkpoint_name,
+            in_docker_container = args.docker
+        )
 
         fid_value = fid_benchmark(
             apply_fn = state.apply_fn, 
