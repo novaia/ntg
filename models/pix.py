@@ -24,12 +24,15 @@ import jax.numpy as jnp
 import fid
 from inference import reverse_diffusion
 from keras.preprocessing.image import ImageDataGenerator
+import numpy as np
+
+import matplotlib.pyplot as plt
 
 start_epoch = 0 # 0 if training from scratch.
 dataset_path = '../heightmaps/world-heightmaps-01/'
 model_save_path = 'data/pix_checkpoints/'
 model_name = 'pix'
-image_save_path = 'data/images/'
+image_save_path = 'data/pix_training_generations/'
 log_path = 'data/logs/pix.csv'
 in_docker_container = True
 
@@ -260,6 +263,26 @@ def save_checkpoint(
     else:
         checkpointer.save(final_save_path, state)
 
+def save_generations(
+    state, num_images, diffusion_steps, image_width, image_height, epoch, save_path
+):
+    samples = reverse_diffusion(
+        apply_fn=state.apply_fn, 
+        params=state.params,
+        batch_stats=state.batch_stats, 
+        num_images=num_images, 
+        diffusion_steps=diffusion_steps, 
+        image_height=image_height, 
+        image_width=image_width, 
+        channels=1, 
+        diffusion_schedule_fn=diffusion_schedule,
+    )
+    samples = (samples - np.min(samples))
+    samples = samples / np.max(samples)
+    samples = samples.repeat(3, axis=-1)
+    for i, sample in enumerate(samples):
+        plt.imsave(os.path.join(save_path, f'{epoch}_{i}.png'), sample, cmap='gray')
+
 def get_checkpoint_name(model_name, epoch):
     return f'{model_name}_epoch{epoch}'
 
@@ -316,11 +339,11 @@ if __name__ == '__main__':
     if args.start_epoch != 0:
         checkpoint_name = get_checkpoint_name(args.model_name, args.start_epoch)
         checkpoint_path = os.path.join(args.model_save_path, checkpoint_name)
-        state = checkpointer.restore(os.path.abspath(checkpoint_path))
+        state = checkpointer.restore(os.path.abspath(checkpoint_path), item=state)
         print(f'Resuming training from epoch {args.start_epoch}')
     else:
         print('Starting training from scratch')
-    
+
     #checkpoint_name = get_checkpoint_name(args.model_name, 1)
     #save_checkpoint(checkpointer, state, args.model_save_path, checkpoint_name, args.docker)
     #print(f'Saved checkpoint')
@@ -376,6 +399,16 @@ if __name__ == '__main__':
             model_save_path = args.model_save_path, 
             checkpoint_name = checkpoint_name,
             in_docker_container = args.docker
+        )
+
+        save_generations(
+            state = state, 
+            num_images = 10, 
+            diffusion_steps = 20, 
+            image_width = args.image_width, 
+            image_height = args.image_height, 
+            epoch = absolute_epoch, 
+            save_path = args.image_save_path
         )
 
         fid_value = fid_benchmark(
