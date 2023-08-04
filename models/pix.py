@@ -48,7 +48,7 @@ block_depth = 2
 
 # Optimization.
 ema = 0.999
-learning_rate = 1e-3
+learning_rate = 1e-4
 weight_decay = 1e-4
 epochs = 100
 
@@ -179,7 +179,10 @@ def create_train_state(module, rng, learning_rate, image_width, image_height):
     batch_stats = variables['batch_stats']
     tx = optax.adam(learning_rate)
     train_state = TrainState.create(
-        apply_fn=module.apply, params=params, tx=tx, batch_stats=batch_stats
+        apply_fn=module.apply, 
+        params=params, 
+        tx=tx, 
+        batch_stats=batch_stats
     )
     return train_state
 
@@ -302,6 +305,8 @@ if __name__ == '__main__':
     parser.add_argument('--log_file', type=str, default=log_path, help=help_text)
     help_text = 'Batch size for training.'
     parser.add_argument('--batch_size', type=int, default=batch_size, help=help_text)
+    help_text = 'Learning rate for Adam optimizer.'
+    parser.add_argument('--learning_rate', type=float, default=learning_rate, help=help_text)
     help_text = 'Number of epochs to train for.'
     parser.add_argument('--epochs', type=int, default=epochs, help=help_text)
     help_text = 'Width of image to load from dataset.'
@@ -331,7 +336,7 @@ if __name__ == '__main__':
     init_rng = jax.random.PRNGKey(0)
     model = DDIM(widths, block_depth)
     state = create_train_state(
-        model, init_rng, learning_rate, args.image_width, args.image_height
+        model, init_rng, args.learning_rate, args.image_width, args.image_height
     )
     del init_rng
 
