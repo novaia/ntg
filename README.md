@@ -19,6 +19,11 @@ python fid --precompute --img_dir ../heightmaps/world-heightmaps-01 --out_dir da
 ```
 Note that fid is structured as a Python package, so you don't have to add the ``.py`` extension when running it.
 
+Full list of paramaters:
+- ``--path1``: Path to image directory or .npz file containing pre-computed statistics. Default: ``None``
+- ``--path2``: Path to image directory or .npz file containing pre-computed statistics. Default: ``None``
+- ``--batch_size``: Batch size per device for computing the Inception activations. Default: ``50``
+
 ## Legacy Code
  The ``legacy`` directory contains all the NTG code that was originally implemented in Tensorflow. This code is no longer maintained, but is kept here for reference. In order to run it, use the Docker environment described by the ``legacy/Dockerfile`` and ``legacy/docker-compose.yaml`` files.
 
