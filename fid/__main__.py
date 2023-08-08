@@ -107,7 +107,7 @@ if __name__ == '__main__':
     help_text = 'Resize images to this size. The format is (height, width).'
     parser.add_argument('--img_size', type=int, nargs=2, help=help_text)
     help_text = 'If True, pre-compute statistics for given image directory.'
-    parser.add_argument('--precompute', action='store_true', help=help_text)
+    parser.add_argument('--precompute', type=bool, default=False, help=help_text)
     help_text = 'Path to image directory for pre-computing statistics.'
     parser.add_argument('--img_dir', type=str, help=help_text)
     help_text = 'Path where pre-computed statistics are stored.'
