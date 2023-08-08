@@ -8,7 +8,7 @@ Neural Terrain Generation (NTG) is a collection of generative neural networks th
 ## Setup
 After cloning, create a directory at the root of the repository called ``data``.
 
-## Precomputing FID Stats
+## Computing FID Stats
 Before starting a training run, you must compute the FID stats for the dataset you are using. This is done by running: 
 ```
 python fid --precompute --img_dir <PATH_TO_DATASET> --out_dir <PATH_TO_OUTPUT_DIRECTORY> --img_size <WIDTH> <HEIGHT>
@@ -23,6 +23,13 @@ Full list of paramaters:
 - ``--path1``: Path to image directory or .npz file containing pre-computed statistics. Default: ``None``
 - ``--path2``: Path to image directory or .npz file containing pre-computed statistics. Default: ``None``
 - ``--batch_size``: Batch size per device for computing the Inception activations. Default: ``50``
+- ``--img_size``: Resize images to this size. The format is (height, width). Default: ``None``, ``None``
+- ``--precompute``: If True, pre-compute statistics for given image directory. Default: ``False``
+- ``--img_dir``: Path to image directory for pre-computing statistics. Default: ``None``
+- ``--out_dir``: Path where pre-computed statistics are stored. Default: ``None``
+- ``--out_name``: Name of outputted statistics file. Default: ``stats``
+- ``--mmap``: If True, use mmap to compute statistics. Helpful for large datasets. Default: ``True``
+- ``--mmap_filename``: Name for mmap file. Only used if mmap is True. Default: ``data/temp/mmap_file``
 
 ## Legacy Code
  The ``legacy`` directory contains all the NTG code that was originally implemented in Tensorflow. This code is no longer maintained, but is kept here for reference. In order to run it, use the Docker environment described by the ``legacy/Dockerfile`` and ``legacy/docker-compose.yaml`` files.
