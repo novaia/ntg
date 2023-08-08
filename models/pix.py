@@ -361,6 +361,7 @@ if __name__ == '__main__':
 
     for epoch in range(args.epochs):
         epoch_start_time = datetime.now()
+        absolute_epoch = args.start_epoch + epoch + 1
 
         losses = []
         for step in range(steps_per_epoch):
@@ -369,7 +370,7 @@ if __name__ == '__main__':
             if images.shape[0] != batch_size:
                 continue
             
-            train_step_key = jax.random.PRNGKey(epoch * steps_per_epoch + step)
+            train_step_key = jax.random.PRNGKey(absolute_epoch * steps_per_epoch + step)
             loss, state = train_step(state, images, train_step_key)
             losses.append(loss)
         average_loss = sum(losses) / len(losses)
@@ -377,7 +378,6 @@ if __name__ == '__main__':
         epoch_end_time = datetime.now()
         epoch_delta_time = epoch_end_time - epoch_start_time
         simple_epoch_end_time = str(epoch_end_time.hour) + ':' + str(epoch_end_time.minute)
-        absolute_epoch = args.start_epoch + epoch + 1
 
         print(
             'Epoch', 
