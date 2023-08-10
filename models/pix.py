@@ -25,7 +25,7 @@ import fid
 from inference import reverse_diffusion
 from keras.preprocessing.image import ImageDataGenerator
 import numpy as np
-
+from tqdm import tqdm
 import matplotlib.pyplot as plt
 
 start_epoch = 0 # 0 if training from scratch.
@@ -43,15 +43,15 @@ max_signal_rate = 0.95
 # Architecture.
 embedding_dims = 32
 embedding_max_frequency = 1000.0
-widths = [32, 64, 96, 128, 160]
-block_depth = 2
+widths = [64, 96, 128, 160, 192]
+block_depth = 3
 
 # Optimization.
 learning_rate = 1e-4
 epochs = 100
 
 # Input.
-batch_size = 8
+batch_size = 4
 image_width = 256
 image_height = 256
 channels = 1
