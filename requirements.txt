@@ -7,3 +7,4 @@ keras
 tensorflow
 orbax-checkpoint
 tqdm
+matplotlib
