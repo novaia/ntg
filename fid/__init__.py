@@ -22,7 +22,7 @@ def compute_statistics_with_mmap(
 
     activation_sum = np.zeros((activation_dim))
     for i in tqdm(range(num_batches)):
-        x = get_batch_fn()
+        x = get_batch_fn(seed = i)
         x = np.asarray(x)
         x = 2 * x - 1
         activation_batch = apply_fn(params, jax.lax.stop_gradient(x))
@@ -43,8 +43,8 @@ def compute_statistics_with_mmap(
 def compute_statistics(params, apply_fn, num_batches, get_batch_fn):
     activations = []
 
-    for _ in tqdm(range(num_batches)):
-        x = get_batch_fn()
+    for i in tqdm(range(num_batches)):
+        x = get_batch_fn(seed = i)
         x = np.asarray(x)
         x = 2 * x - 1
         pred = apply_fn(params, jax.lax.stop_gradient(x))
