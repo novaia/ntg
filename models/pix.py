@@ -45,6 +45,8 @@ embedding_dims = 32
 embedding_max_frequency = 1000.0
 widths = [64, 96, 128, 160, 192]
 block_depth = 3
+#block_depth = 2
+#widths = [32, 64, 96, 128]
 
 # Optimization.
 learning_rate = 1e-4
@@ -217,7 +219,7 @@ def train_step(state, images, parent_key):
 def fid_benchmark(apply_fn, params, batch_stats, stats_path, batch_size, num_samples):
     num_batches = num_samples // batch_size
 
-    def get_sample_batch(apply_fn, params, batch_stats, batch_size):
+    def get_sample_batch(apply_fn, params, batch_stats, batch_size, seed):
         samples = reverse_diffusion(
             apply_fn=apply_fn, 
             params=params,
@@ -228,6 +230,7 @@ def fid_benchmark(apply_fn, params, batch_stats, stats_path, batch_size, num_sam
             image_width=256, 
             channels=1, 
             diffusion_schedule_fn=diffusion_schedule,
+            seed=seed
         )
         # FID requires 3 channels.
         return samples.repeat(3, axis=-1)
@@ -277,6 +280,7 @@ def save_generations(
         image_width=image_width, 
         channels=1, 
         diffusion_schedule_fn=diffusion_schedule,
+        seed=0
     )
     samples = (samples - np.min(samples))
     samples = samples / np.max(samples)

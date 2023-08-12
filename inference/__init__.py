@@ -12,12 +12,13 @@ def reverse_diffusion(
     image_width, 
     image_height, 
     channels, 
-    diffusion_schedule_fn, 
-    initial_noise = None
+    diffusion_schedule_fn,
+    seed, 
+    initial_noise = None,
 ):
     if initial_noise == None:
         initial_noise = jax.random.normal(
-            jax.random.PRNGKey(0), 
+            jax.random.PRNGKey(seed), 
             shape=(num_images, image_height, image_width, channels)
         )
     step_size = 1.0 / diffusion_steps
