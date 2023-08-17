@@ -34,7 +34,8 @@ Full list of paramaters:
 ## Models
 - [Pix](./models/pix.py): Vanilla implicit diffusion model (DDIM).
 - [Hyper](./models/hyper.py): Latent implicit diffusion model.
-To train these models, simply run their corresponding python script. Currently, only pix is trainable. 
+
+To train these models, simply run their corresponding python script. Currently, only Pix is trainable. 
 
 ## Legacy Code
  The ``legacy`` directory contains all the NTG code that was originally implemented in Tensorflow. This code is no longer maintained, but is kept here for reference. In order to run it, use the Docker environment described by the ``legacy/Dockerfile`` and ``legacy/docker-compose.yaml`` files.
