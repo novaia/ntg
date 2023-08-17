@@ -32,8 +32,8 @@ Full list of paramaters:
 - ``--mmap_filename``: Name for mmap file. Only used if mmap is True. Default: ``data/temp/mmap_file``
 
 ## Models
-- [pix](./models/pix.py): Vanilla implicit diffusion model (DDIM).
-- [hyper](./models/hyper.py) Latent implicit diffusion model.
+- [Pix](./models/pix.py): Vanilla implicit diffusion model (DDIM).
+- [Hyper](./models/hyper.py): Latent implicit diffusion model.
 To train these models, simply run their corresponding python script. Currently, only pix is trainable. 
 
 ## Legacy Code
