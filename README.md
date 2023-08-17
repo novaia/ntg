@@ -31,6 +31,11 @@ Full list of paramaters:
 - ``--mmap``: If True, use mmap to compute statistics. Helpful for large datasets. Default: ``True``
 - ``--mmap_filename``: Name for mmap file. Only used if mmap is True. Default: ``data/temp/mmap_file``
 
+## Models
+- [pix](./models/pix.py): Vanilla implicit diffusion model (DDIM).
+- [hyper](./models/hyper.py) Latent implicit diffusion model.
+To train these models, simply run their corresponding python script. Currently, only pix is trainable. 
+
 ## Legacy Code
  The ``legacy`` directory contains all the NTG code that was originally implemented in Tensorflow. This code is no longer maintained, but is kept here for reference. In order to run it, use the Docker environment described by the ``legacy/Dockerfile`` and ``legacy/docker-compose.yaml`` files.
 
