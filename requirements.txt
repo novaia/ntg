@@ -8,3 +8,4 @@ tensorflow
 orbax-checkpoint
 tqdm
 matplotlib
+pandas
