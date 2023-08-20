@@ -97,10 +97,11 @@ class ResidualBlock(nn.Module):
             residual = x
         else:
             residual = nn.Conv(self.width, kernel_size=(1, 1))(x)
-        x = nn.BatchNorm(use_running_average=not train)(x)
         x = nn.Conv(self.width, kernel_size=(3, 3))(x)
+        x = nn.GroupNorm()(x)
         x = nn.activation.swish(x)
         x = nn.Conv(self.width, kernel_size=(3, 3))(x)
+        x = nn.GroupNorm()(x)
         x = x + residual
         return x
 
@@ -172,22 +173,17 @@ def diffusion_schedule(diffusion_times):
     return noise_rates, signal_rates    
 
 # Training.
-class TrainState(train_state.TrainState):
-    batch_stats: Any
-
 def create_train_state(module, rng, learning_rate, image_width, image_height):
     x = (jnp.ones([1, image_width, image_height, 1]), jnp.ones([1, 1, 1, 1]))
     variables = module.init(rng, x, True)
     params = variables['params']
-    batch_stats = variables['batch_stats']
     tx = optax.adam(learning_rate)
-    train_state = TrainState.create(
+    ts = train_state.TrainState.create(
         apply_fn=module.apply, 
         params=params, 
         tx=tx, 
-        batch_stats=batch_stats
     )
-    return train_state
+    return ts
 
 @jax.jit
 def train_step(state, images, parent_key):
@@ -202,31 +198,27 @@ def train_step(state, images, parent_key):
         noise_rates, signal_rates = diffusion_schedule(diffusion_times)
         noisy_images = signal_rates * images + noise_rates * noises
 
-        pred_noises, updates = state.apply_fn(
-            {'params': params, 'batch_stats': state.batch_stats}, 
+        pred_noises = state.apply_fn(
+            {'params': params}, 
              [noisy_images, noise_rates**2],
              train=True,
-             mutable=['batch_stats']
         )
 
-        # TODO: switch to MAE
         loss = jnp.mean((pred_noises - noises)**2)
-        return loss, updates
+        return loss
 
-    grad_fn = jax.value_and_grad(loss_fn, has_aux=True)
-    (loss, updates), grads = grad_fn(state.params)
+    grad_fn = jax.value_and_grad(loss_fn)
+    loss, grads = grad_fn(state.params)
     state = state.apply_gradients(grads=grads)
-    state = state.replace(batch_stats=updates['batch_stats'])
     return loss, state
 
-def fid_benchmark(apply_fn, params, batch_stats, stats_path, batch_size, num_samples):
+def fid_benchmark(apply_fn, params, stats_path, batch_size, num_samples):
     num_batches = num_samples // batch_size
 
-    def get_sample_batch(apply_fn, params, batch_stats, batch_size, seed):
+    def get_sample_batch(apply_fn, params, batch_size, seed):
         samples = reverse_diffusion(
             apply_fn=apply_fn, 
             params=params,
-            batch_stats=batch_stats, 
             num_images=batch_size, 
             diffusion_steps=10, 
             image_height=256, 
@@ -239,7 +231,7 @@ def fid_benchmark(apply_fn, params, batch_stats, stats_path, batch_size, num_sam
         # FID requires 3 channels.
         return samples.repeat(3, axis=-1)
     get_batch_fn = functools.partial(
-        get_sample_batch, apply_fn, params, batch_stats, batch_size
+        get_sample_batch, apply_fn, params, batch_size
     )
 
     params, apply_fn = fid.get_inception_model()
@@ -277,7 +269,6 @@ def save_generations(
     samples = reverse_diffusion(
         apply_fn=state.apply_fn, 
         params=state.params,
-        batch_stats=state.batch_stats, 
         num_images=num_images, 
         diffusion_steps=diffusion_steps, 
         image_height=image_height, 
@@ -419,7 +410,6 @@ if __name__ == '__main__':
         fid_value = fid_benchmark(
             apply_fn = state.apply_fn, 
             params = state.params, 
-            batch_stats = state.batch_stats, 
             stats_path = args.fid_stats_path,
             batch_size = args.fid_batch_size,
             num_samples = args.num_fid_samples

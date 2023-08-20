@@ -6,7 +6,6 @@ import jax.numpy as jnp
 def reverse_diffusion(
     apply_fn, 
     params,
-    batch_stats,
     num_images, 
     diffusion_steps, 
     image_width, 
@@ -32,7 +31,7 @@ def reverse_diffusion(
         #pred_noises = apply_fn(params, [noisy_images, noise_rates**2], mutable=False)
         pred_noises = lax.stop_gradient(
             apply_fn(
-                {'params': params, 'batch_stats': batch_stats}, 
+                {'params': params}, 
                 [noisy_images, noise_rates**2],
                 train=False,    
             )
