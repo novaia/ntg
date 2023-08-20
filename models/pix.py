@@ -43,10 +43,8 @@ max_signal_rate = 0.95
 # Architecture.
 embedding_dims = 32
 embedding_max_frequency = 1000.0
-widths = [64, 96, 128, 160, 192]
-block_depth = 3
-#block_depth = 2
-#widths = [32, 64, 96, 128]
+widths = [128, 128, 128, 128]
+block_depth = 2
 
 # Optimization.
 learning_rate = 1e-4
@@ -347,6 +345,8 @@ if __name__ == '__main__':
         model, init_rng, args.learning_rate, args.image_width, args.image_height
     )
     del init_rng
+    param_count = sum(x.size for x in jax.tree_util.tree_leaves(state.params))
+    print(f'Parameter Count: {param_count}')
 
     checkpointer = ocp.Checkpointer(ocp.PyTreeCheckpointHandler(use_ocdbt=True))
     if args.start_epoch != 0:
@@ -366,26 +366,6 @@ if __name__ == '__main__':
         classes = ['']
     )
     steps_per_epoch = len(heightmap_iterator)
-
-    save_generations(
-        state = state, 
-        num_images = 10, 
-        diffusion_steps = 20, 
-        image_width = args.image_width, 
-        image_height = args.image_height, 
-        epoch = 28, 
-        save_path = args.image_save_path
-    )
-    #fid_value = fid_benchmark(
-    #    apply_fn = state.apply_fn, 
-    #    params = state.params, 
-    #    batch_stats = state.batch_stats, 
-    #    stats_path = args.fid_stats_path,
-    #    batch_size = args.fid_batch_size,
-    #    num_samples = args.num_fid_samples
-    #)
-    #print('FID:', fid_value)
-    exit(0)
 
     for epoch in range(args.epochs):
         epoch_start_time = datetime.now()
