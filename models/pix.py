@@ -66,7 +66,12 @@ num_fid_samples = 5000
 
 def preprocessing_function(image):
     image = image.astype(float) / 255
+    image = (image * 2) - 1
     return image
+
+# Transforms images from [-1, 1] to [0, 1].
+def bipolar_to_binary(images):
+    return (images + 1) / 2
 
 def sinusoidal_embedding(x):
     embedding_min_frequency = 1.0
@@ -232,6 +237,7 @@ def fid_benchmark(apply_fn, params, batch_stats, stats_path, batch_size, num_sam
             diffusion_schedule_fn=diffusion_schedule,
             seed=seed
         )
+        samples = bipolar_to_binary(samples)
         # FID requires 3 channels.
         return samples.repeat(3, axis=-1)
     get_batch_fn = functools.partial(
@@ -282,8 +288,8 @@ def save_generations(
         diffusion_schedule_fn=diffusion_schedule,
         seed=0
     )
-    samples = (samples - np.min(samples))
-    samples = samples / np.max(samples)
+    samples = bipolar_to_binary(samples)
+    samples = jnp.clip(samples, 0.0, 1.0)
     samples = samples.repeat(3, axis=-1)
     for i, sample in enumerate(samples):
         plt.imsave(os.path.join(save_path, f'{epoch}_{i}.png'), sample, cmap='gray')
@@ -360,6 +366,26 @@ if __name__ == '__main__':
         classes = ['']
     )
     steps_per_epoch = len(heightmap_iterator)
+
+    save_generations(
+        state = state, 
+        num_images = 10, 
+        diffusion_steps = 20, 
+        image_width = args.image_width, 
+        image_height = args.image_height, 
+        epoch = 28, 
+        save_path = args.image_save_path
+    )
+    #fid_value = fid_benchmark(
+    #    apply_fn = state.apply_fn, 
+    #    params = state.params, 
+    #    batch_stats = state.batch_stats, 
+    #    stats_path = args.fid_stats_path,
+    #    batch_size = args.fid_batch_size,
+    #    num_samples = args.num_fid_samples
+    #)
+    #print('FID:', fid_value)
+    exit(0)
 
     for epoch in range(args.epochs):
         epoch_start_time = datetime.now()

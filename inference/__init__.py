@@ -42,5 +42,5 @@ def reverse_diffusion(
         next_diffusion_times = diffusion_times - step_size
         next_noise_rates, next_signal_rates = diffusion_schedule_fn(next_diffusion_times)
         next_noisy_images = (next_signal_rates * pred_images + next_noise_rates * pred_noises)
-        
+
     return pred_images
