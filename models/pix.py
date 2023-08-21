@@ -21,8 +21,10 @@ import optax # Optimizers.
 import orbax.checkpoint as ocp
 import jax
 import jax.numpy as jnp
+from jax import lax
 import fid
 from inference import reverse_diffusion
+import keras
 from keras.preprocessing.image import ImageDataGenerator
 import numpy as np
 from tqdm import tqdm
@@ -43,7 +45,7 @@ max_signal_rate = 0.95
 # Architecture.
 embedding_dims = 32
 embedding_max_frequency = 1000.0
-widths = [128, 128, 128, 128]
+widths = [32, 32, 32, 32]
 block_depth = 2
 
 # Optimization.
@@ -51,7 +53,8 @@ learning_rate = 1e-4
 epochs = 100
 
 # Input.
-batch_size = 4
+batch_size = 16
+test_batch_size = 16
 image_width = 256
 image_height = 256
 channels = 1
@@ -212,6 +215,32 @@ def train_step(state, images, parent_key):
     state = state.apply_gradients(grads=grads)
     return loss, state
 
+@jax.jit
+def test_step(state, images, parent_key):
+    noise_key, diffusion_time_key = jax.random.split(parent_key, 2)
+    batch_size = len(images)
+    
+    def loss_fn(params):
+        noises = jax.random.normal(
+            noise_key, (batch_size, images.shape[1], images.shape[2], channels)
+        )
+        diffusion_times = jax.random.uniform(diffusion_time_key, (batch_size, 1, 1, 1))
+        noise_rates, signal_rates = diffusion_schedule(diffusion_times)
+        noisy_images = signal_rates * images + noise_rates * noises
+
+        pred_noises = lax.stop_gradient(
+            state.apply_fn(
+                {'params': params}, 
+                [noisy_images, noise_rates**2],
+                train=False,
+            )
+        )
+
+        loss = jnp.mean((pred_noises - noises)**2)
+        return loss
+
+    return loss_fn(state.params)
+
 def fid_benchmark(apply_fn, params, stats_path, batch_size, num_samples):
     num_batches = num_samples // batch_size
 
@@ -302,6 +331,8 @@ if __name__ == '__main__':
     parser.add_argument('--log_file', type=str, default=log_path, help=help_text)
     help_text = 'Batch size for training.'
     parser.add_argument('--batch_size', type=int, default=batch_size, help=help_text)
+    help_text = 'Batch size for testing.'
+    parser.add_argument('--test_batch_size', type=int, default=test_batch_size, help=help_text)
     help_text = 'Learning rate for Adam optimizer.'
     parser.add_argument('--learning_rate', type=float, default=learning_rate, help=help_text)
     help_text = 'Number of epochs to train for.'
@@ -328,7 +359,7 @@ if __name__ == '__main__':
 
     if not os.path.isfile(args.log_file):
         with open(args.log_file, 'w+') as f:
-            f.write('epoch,loss,fid\n')
+            f.write('epoch,loss,val_loss,fid\n')
 
     init_rng = jax.random.PRNGKey(0)
     model = DDIM(widths, block_depth)
@@ -349,14 +380,22 @@ if __name__ == '__main__':
         print('Starting training from scratch')
 
     idg = ImageDataGenerator(preprocessing_function = preprocessing_function)
-    heightmap_iterator = idg.flow_from_directory(
-        args.dataset_path, 
+    train_iterator = idg.flow_from_directory(
+        os.path.join(args.dataset_path, 'train'), 
         target_size = (args.image_height, args.image_width), 
         batch_size = args.batch_size,
         color_mode = 'grayscale',
         classes = ['']
     )
-    steps_per_epoch = len(heightmap_iterator)
+    test_iterator = idg.flow_from_directory(
+        os.path.join(args.dataset_path, 'test'),
+        target_size = (args.image_height, args.image_width),
+        batch_size = args.test_batch_size,
+        color_mode = 'grayscale',
+        classes = ['']
+    )
+    steps_per_epoch = len(train_iterator)
+    steps_per_test = len(test_iterator)
 
     for epoch in range(args.epochs):
         epoch_start_time = datetime.now()
@@ -364,7 +403,7 @@ if __name__ == '__main__':
 
         losses = []
         for step in range(steps_per_epoch):
-            images = jnp.asarray(heightmap_iterator.next()[0])
+            images = jnp.asarray(train_iterator.next()[0])
             
             if images.shape[0] != batch_size:
                 continue
@@ -373,6 +412,18 @@ if __name__ == '__main__':
             loss, state = train_step(state, images, train_step_key)
             losses.append(loss)
         average_loss = sum(losses) / len(losses)
+
+        test_losses = []
+        for step in range(steps_per_test):
+            images = jnp.asarray(test_iterator.next()[0])
+            
+            if images.shape[0] != batch_size:
+                continue
+            
+            test_step_key = jax.random.PRNGKey((absolute_epoch * steps_per_test + step) * -1)
+            loss = test_step(state, images, test_step_key)
+            test_losses.append(loss)
+        average_test_loss = sum(test_losses) / len(test_losses)
 
         epoch_end_time = datetime.now()
         epoch_delta_time = epoch_end_time - epoch_start_time
@@ -387,6 +438,7 @@ if __name__ == '__main__':
             str(epoch_delta_time)
         )
         print(f'Loss: {average_loss}')
+        print(f'Val Loss: {average_test_loss}')
 
         checkpoint_name = get_checkpoint_name(args.model_name, absolute_epoch)
         save_checkpoint(
@@ -417,4 +469,4 @@ if __name__ == '__main__':
         print('FID:', fid_value)
         
         with open(args.log_file, 'a') as f:
-            f.write(f'{absolute_epoch},{average_loss},{fid_value}\n')
+            f.write(f'{absolute_epoch},{average_loss},{average_test_loss},{fid_value}\n')
