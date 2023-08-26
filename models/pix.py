@@ -19,12 +19,14 @@ import flax.linen as nn
 from flax.training import train_state
 import optax # Optimizers.
 import orbax.checkpoint as ocp
+from orbax.export import JaxModule, ExportManager, ServingConfig, dtensor_utils
 import jax
 import jax.numpy as jnp
 from jax import lax
 import fid
 from inference import reverse_diffusion
 import keras
+import tensorflow as tf
 from keras.preprocessing.image import ImageDataGenerator
 import numpy as np
 from tqdm import tqdm
@@ -45,7 +47,7 @@ max_signal_rate = 0.95
 # Architecture.
 embedding_dims = 32
 embedding_max_frequency = 1000.0
-widths = [32, 32, 32, 32]
+widths = [64, 64, 64, 64]
 block_depth = 2
 
 # Optimization.
@@ -53,7 +55,7 @@ learning_rate = 1e-4
 epochs = 100
 
 # Input.
-batch_size = 16
+batch_size = 8
 test_batch_size = 16
 image_width = 256
 image_height = 256
@@ -94,7 +96,7 @@ class ResidualBlock(nn.Module):
     width: int
 
     @nn.compact
-    def __call__(self, x, train: bool):
+    def __call__(self, x):
         input_width = x.shape[-1]
         if input_width == self.width:
             residual = x
@@ -113,11 +115,11 @@ class DownBlock(nn.Module):
     block_depth: int
 
     @nn.compact
-    def __call__(self, x, train: bool):
+    def __call__(self, x):
         x, skips = x
 
         for _ in range(self.block_depth):
-            x = ResidualBlock(self.width)(x, train)
+            x = ResidualBlock(self.width)(x)
             skips.append(x)
         x = nn.avg_pool(x, window_shape=(2, 2), strides=(2, 2))
         return x
@@ -127,7 +129,7 @@ class UpBlock(nn.Module):
     block_depth: int
 
     @nn.compact
-    def __call__(self, x, train: bool):
+    def __call__(self, x):
         x, skips = x
 
         upsample_shape = (x.shape[0], x.shape[1] * 2, x.shape[2] * 2, x.shape[3])
@@ -135,7 +137,7 @@ class UpBlock(nn.Module):
 
         for _ in range(self.block_depth):
             x = jnp.concatenate([x, skips.pop()], axis=-1)
-            x = ResidualBlock(self.width)(x, train)
+            x = ResidualBlock(self.width)(x)
         return x
 
 class DDIM(nn.Module):
@@ -143,7 +145,7 @@ class DDIM(nn.Module):
     block_depth: int
 
     @nn.compact
-    def __call__(self, x, train: bool):
+    def __call__(self, x):
         x, noise_variances = x
 
         e = sinusoidal_embedding(noise_variances)
@@ -154,13 +156,13 @@ class DDIM(nn.Module):
 
         skips = []
         for width in self.widths[:-1]:
-            x = DownBlock(width, self.block_depth)([x, skips], train)
+            x = DownBlock(width, self.block_depth)([x, skips])
 
         for _ in range(self.block_depth):
-            x = ResidualBlock(self.widths[-1])(x, train)
+            x = ResidualBlock(self.widths[-1])(x)
 
         for width in reversed(self.widths[:-1]):
-            x = UpBlock(width, self.block_depth)([x, skips], train)
+            x = UpBlock(width, self.block_depth)([x, skips])
 
         x = nn.Conv(channels, kernel_size=(1, 1), kernel_init=nn.initializers.zeros_init())(x)
         return x
@@ -178,7 +180,7 @@ def diffusion_schedule(diffusion_times):
 # Training.
 def create_train_state(module, rng, learning_rate, image_width, image_height):
     x = (jnp.ones([1, image_width, image_height, 1]), jnp.ones([1, 1, 1, 1]))
-    variables = module.init(rng, x, True)
+    variables = module.init(rng, x)
     params = variables['params']
     tx = optax.adam(learning_rate)
     ts = train_state.TrainState.create(
@@ -351,6 +353,8 @@ if __name__ == '__main__':
     parser.add_argument('--num_fid_samples', type=int, default=num_fid_samples, help=help_text)
     help_text = 'If true, the program will expect to be running inside a docker container.'
     parser.add_argument('--docker', type=bool, default=in_docker_container, help=help_text)
+    help_text = 'If true, the model will be exported to a TF SavedModel instead of training.'
+    parser.add_argument('--export', type=bool, default=False, help=help_text)
     args = parser.parse_args()
     print('GPU:', jax.devices('gpu'))
 
@@ -378,6 +382,25 @@ if __name__ == '__main__':
         print(f'Resuming training from epoch {args.start_epoch}')
     else:
         print('Starting training from scratch')
+    
+    if args.export:
+        print('Exporting model to TF SavedModel')
+        input_shape = [image_width, image_width, channels]
+        jax_module = JaxModule(state.params, state.apply_fn)
+        export_mgr = ExportManager(
+            jax_module, [
+                ServingConfig(
+                    'serving_default',
+                    input_signature = [
+                        (tf.TensorSpec(shape=input_shape, dtype=tf.float32),
+                        tf.TensorSpec(shape=[], dtype=tf.float32))
+                    ]
+                ),
+            ]
+        )
+        output_dir='data/temp/saved_model'
+        export_mgr.save(output_dir)
+        exit(0)
 
     idg = ImageDataGenerator(preprocessing_function = preprocessing_function)
     train_iterator = idg.flow_from_directory(
@@ -438,7 +461,7 @@ if __name__ == '__main__':
             str(epoch_delta_time)
         )
         print(f'Loss: {average_loss}')
-        print(f'Val Loss: {average_test_loss}')
+        print(f'Validation Loss: {average_test_loss}')
 
         checkpoint_name = get_checkpoint_name(args.model_name, absolute_epoch)
         save_checkpoint(

@@ -6,6 +6,7 @@ flax
 keras
 tensorflow
 orbax-checkpoint
+orbax-export
 tqdm
 matplotlib
 pandas
