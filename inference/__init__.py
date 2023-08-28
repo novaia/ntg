@@ -28,7 +28,6 @@ def reverse_diffusion(
         
         diffusion_times = jnp.ones((num_images, 1, 1, 1)) - step * step_size
         noise_rates, signal_rates = diffusion_schedule_fn(diffusion_times)
-        #pred_noises = apply_fn(params, [noisy_images, noise_rates**2], mutable=False)
         pred_noises = lax.stop_gradient(
             apply_fn(
                 {'params': params}, 
