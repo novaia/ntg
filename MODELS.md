@@ -22,7 +22,8 @@ Full list of script parameters:
 - ``--fid_stats_path``: Path to file containing precomputed FID stats for training dataset.
 - ``--fid_batch_size``: Batch size for generating FID samples.
 - ``--num_fid_samples``: Number of samples to generate for FID benchmark.
-- ``--docker``: If true, the program will expect to be running inside a docker container.
+- ``--docker``: If true, the program will expect to be running inside a docker container. Default: ``True``
+- ``--export``: 'If true, the model will be exported to a TF SavedModel instead of training. Default: ``False``
 
 ## Hyper
 
