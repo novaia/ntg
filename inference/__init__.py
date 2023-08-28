@@ -10,7 +10,7 @@ def reverse_diffusion(
     diffusion_steps, 
     image_width, 
     image_height, 
-    channels, 
+    channels,
     diffusion_schedule_fn,
     seed, 
     initial_noise = None,
@@ -32,8 +32,7 @@ def reverse_diffusion(
         pred_noises = lax.stop_gradient(
             apply_fn(
                 {'params': params}, 
-                [noisy_images, noise_rates**2],
-                train=False,    
+                [noisy_images, noise_rates**2], 
             )
         )
         pred_images = (noisy_images - noise_rates * pred_noises) / signal_rates

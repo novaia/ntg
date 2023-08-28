@@ -15,22 +15,24 @@ import math
 import functools
 from datetime import datetime
 from typing import Any
+
+import jax
+import jax.numpy as jnp
+from jax import lax
+from jax.experimental import jax2tf
 import flax.linen as nn
 from flax.training import train_state
 import optax # Optimizers.
 import orbax.checkpoint as ocp
-from orbax.export import JaxModule, ExportManager, ServingConfig, dtensor_utils
-import jax
-import jax.numpy as jnp
-from jax import lax
+#from orbax.export import JaxModule, ExportManager, ServingConfig, dtensor_utils
+import keras
+from keras.preprocessing.image import ImageDataGenerator
+import tensorflow as tf
+import matplotlib.pyplot as plt
+
+# Local modules.
 import fid
 from inference import reverse_diffusion
-import keras
-import tensorflow as tf
-from keras.preprocessing.image import ImageDataGenerator
-import numpy as np
-from tqdm import tqdm
-import matplotlib.pyplot as plt
 
 start_epoch = 0 # 0 if training from scratch.
 dataset_path = '../heightmaps/world-heightmaps-01/'
@@ -206,7 +208,6 @@ def train_step(state, images, parent_key):
         pred_noises = state.apply_fn(
             {'params': params}, 
              [noisy_images, noise_rates**2],
-             train=True,
         )
 
         loss = jnp.mean((pred_noises - noises)**2)
@@ -234,7 +235,6 @@ def test_step(state, images, parent_key):
             state.apply_fn(
                 {'params': params}, 
                 [noisy_images, noise_rates**2],
-                train=False,
             )
         )
 
@@ -385,22 +385,22 @@ if __name__ == '__main__':
     
     if args.export:
         print('Exporting model to TF SavedModel')
-        input_shape = [image_width, image_width, channels]
-        jax_module = JaxModule(state.params, state.apply_fn)
-        export_mgr = ExportManager(
-            jax_module, [
-                ServingConfig(
-                    'serving_default',
-                    input_signature = [
-                        (tf.TensorSpec(shape=input_shape, dtype=tf.float32),
-                        tf.TensorSpec(shape=[], dtype=tf.float32))
-                    ]
-                ),
-            ]
-        )
-        output_dir='data/temp/saved_model'
-        export_mgr.save(output_dir)
-        exit(0)
+        tf_module = tf.Module()
+        state_vars = tf.nest.map_structure(tf.Variable, state.params)
+        tf_module.vars = tf.nest.flatten(state_vars)
+        predict_fn = jax2tf.convert(state.apply_fn)
+
+        input_signature = [(
+            tf.TensorSpec(shape=(1, image_width, image_height, channels), dtype=tf.float32),
+            tf.TensorSpec(shape=(1, 1, 1, 1), dtype=tf.float32)
+        )]
+        @tf.function(autograph=False, input_signature=input_signature)
+        def predict(data):
+            return predict_fn({'params': state_vars}, data)
+        
+        tf_module.predict = predict
+        tf.saved_model.save(tf_module, "./data/temp/saved_model")
+        exit(0) # Exit because we don't want to train when --export is True.
 
     idg = ImageDataGenerator(preprocessing_function = preprocessing_function)
     train_iterator = idg.flow_from_directory(
