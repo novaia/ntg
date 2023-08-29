@@ -6,6 +6,9 @@ import requests
 import os
 import tempfile
 
+# this was for downloading the inception checkpoint
+# but I don't think it's needed anymore
+# leaving it here just in case
 
 def download(url, ckpt_dir=None):
     name = url[url.rfind('/') + 1 : url.rfind('?')]
