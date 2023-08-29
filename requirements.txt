@@ -10,3 +10,4 @@ orbax-export
 tqdm
 matplotlib
 pandas
+tf2onnx
