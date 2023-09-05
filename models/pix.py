@@ -207,7 +207,7 @@ def train_step(state, images, parent_key):
 
         pred_noises = state.apply_fn(
             {'params': params}, 
-             [noisy_images, noise_rates**2],
+            [noisy_images, noise_rates**2],
         )
 
         loss = jnp.mean((pred_noises - noises)**2)
@@ -388,15 +388,19 @@ if __name__ == '__main__':
         tf_module = tf.Module()
         state_vars = tf.nest.map_structure(tf.Variable, state.params)
         tf_module.vars = tf.nest.flatten(state_vars)
-        predict_fn = jax2tf.convert(state.apply_fn)
+        predict_fn = jax2tf.convert(
+            state.apply_fn, 
+            enable_xla=False, 
+            polymorphic_shapes=["...", ("b, 256, 256, 1", "b, 1, 1, 1")]
+        )
 
-        input_signature = [(
-            tf.TensorSpec(shape=(1, image_width, image_height, channels), dtype=tf.float32),
-            tf.TensorSpec(shape=(1, 1, 1, 1), dtype=tf.float32)
-        )]
+        input_signature = [
+            tf.TensorSpec(shape=(None, image_width, image_height, channels), dtype=tf.float32),
+            tf.TensorSpec(shape=(None, 1, 1, 1), dtype=tf.float32)
+        ]
         @tf.function(autograph=False, input_signature=input_signature)
-        def predict(data):
-            return predict_fn({'params': state_vars}, data)
+        def predict(images, noise_variances):
+            return predict_fn({'params': state_vars}, (images, noise_variances))
         
         tf_module.predict = predict
         tf.saved_model.save(tf_module, "./data/temp/saved_model")
