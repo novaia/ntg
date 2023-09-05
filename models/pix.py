@@ -34,6 +34,8 @@ import matplotlib.pyplot as plt
 import fid
 from inference import reverse_diffusion
 
+import tf2onnx
+
 start_epoch = 0 # 0 if training from scratch.
 dataset_path = '../heightmaps/world-heightmaps-01/'
 model_save_path = 'data/pix_checkpoints/'
@@ -391,19 +393,28 @@ if __name__ == '__main__':
         predict_fn = jax2tf.convert(
             state.apply_fn, 
             enable_xla=False, 
-            polymorphic_shapes=["...", ("b, 256, 256, 1", "b, 1, 1, 1")]
+            #polymorphic_shapes=["...", ("(b, _, _, _)", "(b, _, _, _)")]
+            native_serialization=False
         )
 
-        input_signature = [
-            tf.TensorSpec(shape=(None, image_width, image_height, channels), dtype=tf.float32),
-            tf.TensorSpec(shape=(None, 1, 1, 1), dtype=tf.float32)
-        ]
+        input_signature = [(
+            tf.TensorSpec(shape=(1, image_width, image_height, channels), dtype=tf.float32),
+            tf.TensorSpec(shape=(1, 1, 1, 1), dtype=tf.float32)
+        )]
         @tf.function(autograph=False, input_signature=input_signature)
-        def predict(images, noise_variances):
-            return predict_fn({'params': state_vars}, (images, noise_variances))
+        def predict(data):
+            return predict_fn({'params': state_vars}, data)
         
-        tf_module.predict = predict
-        tf.saved_model.save(tf_module, "./data/temp/saved_model")
+        # onnx experimental
+        proto, external_t = tf2onnx.convert.from_function(
+            predict, 
+            input_signature=input_signature,
+            output_path='data/onnx_model_test.onnx'
+        )
+        print(proto)
+
+        #tf_module.predict = predict
+        #tf.saved_model.save(tf_module, "./data/temp/saved_model")
         exit(0) # Exit because we don't want to train when --export is True.
 
     idg = ImageDataGenerator(preprocessing_function = preprocessing_function)
