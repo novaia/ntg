@@ -468,8 +468,6 @@ def train_loop(args, steps_per_epoch, steps_per_test, state, checkpointer, train
             train_step_key = jax.random.PRNGKey(absolute_epoch * steps_per_epoch + step)
             loss, state = train_step(state, images, train_step_key)
             losses.append(loss)
-            # temp
-            break
         average_loss = sum(losses) / len(losses)
 
         test_losses = []
