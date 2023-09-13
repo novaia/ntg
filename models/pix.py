@@ -43,6 +43,7 @@ model_name = 'pix'
 image_save_path = 'data/pix_training_generations/'
 log_path = 'data/logs/pix.csv'
 in_docker_container = True
+export_path = 'data/temp/pix_exported'
 
 # Sampling.
 min_signal_rate = 0.02
@@ -357,6 +358,13 @@ if __name__ == '__main__':
     parser.add_argument('--docker', type=bool, default=in_docker_container, help=help_text)
     help_text = 'If true, the model will be exported to a TF SavedModel instead of training.'
     parser.add_argument('--export', type=bool, default=False, help=help_text)
+    help_text = (
+        'If true, the model will be exported to an ONNX model instead of a ' +
+        'TF SavedModel. Only works if --export is also true.'
+    )
+    parser.add_argument('--onnx', type=bool, default=False, help=help_text)
+    help_text = 'Output path for model export. Should include the model name at the end.'
+    parser.add_argument('--export_path', type=str, default=export_path, help=help_text)
     args = parser.parse_args()
     print('GPU:', jax.devices('gpu'))
 
@@ -381,19 +389,18 @@ if __name__ == '__main__':
         checkpoint_name = get_checkpoint_name(args.model_name, args.start_epoch)
         checkpoint_path = os.path.join(args.model_save_path, checkpoint_name)
         state = checkpointer.restore(os.path.abspath(checkpoint_path), item=state)
-        print(f'Resuming training from epoch {args.start_epoch}')
+        print(f'Loaded checkpoint for epoch {args.start_epoch}')
     else:
-        print('Starting training from scratch')
+        print('Initialized model from scratch')
     
     if args.export:
-        print('Exporting model to TF SavedModel')
+        print('Exporting model...')
         tf_module = tf.Module()
         state_vars = tf.nest.map_structure(tf.Variable, state.params)
         tf_module.vars = tf.nest.flatten(state_vars)
         predict_fn = jax2tf.convert(
             state.apply_fn, 
             enable_xla=False, 
-            #polymorphic_shapes=["...", ("(b, _, _, _)", "(b, _, _, _)")]
             native_serialization=False
         )
 
@@ -405,16 +412,17 @@ if __name__ == '__main__':
         def predict(data):
             return predict_fn({'params': state_vars}, data)
         
-        # onnx experimental
-        proto, external_t = tf2onnx.convert.from_function(
-            predict, 
-            input_signature=input_signature,
-            output_path='data/onnx_model_test.onnx'
-        )
-        print(proto)
-
-        #tf_module.predict = predict
-        #tf.saved_model.save(tf_module, "./data/temp/saved_model")
+        if args.onnx:
+            proto, external_t = tf2onnx.convert.from_function(
+                predict, 
+                input_signature=input_signature,
+                output_path=args.export_path + '.onnx'
+            )
+            print(f'Model exported to ONNX at {args.export_path}.onnx')
+        else:
+            tf_module.predict = predict
+            tf.saved_model.save(tf_module, args.export_path)
+            print(f'Model exported to TF SavedModel at {args.export_path}')
         exit(0) # Exit because we don't want to train when --export is True.
 
     idg = ImageDataGenerator(preprocessing_function = preprocessing_function)
