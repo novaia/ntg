@@ -359,7 +359,7 @@ if __name__ == '__main__':
     help_text = 'If true, the model will be exported to a TF SavedModel instead of training.'
     parser.add_argument('--export', type=bool, default=False, help=help_text)
     help_text = (
-        'If true, the model will be exported to an ONNX model instead of a ' +
+        'If true, the model will be exported directly to an ONNX model instead of a ' +
         'TF SavedModel. Only works if --export is also true.'
     )
     parser.add_argument('--onnx', type=bool, default=False, help=help_text)
