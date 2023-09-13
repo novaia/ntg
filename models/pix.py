@@ -361,7 +361,7 @@ def get_args():
     assert args.start_epoch == 0 or os.path.isdir(current_training_run_path), assertion_text
     return args, current_training_run_path
 
-def setup_log_file(args, current_training_run_path):
+def setup_log_file(current_training_run_path):
     log_file_path = os.path.join(current_training_run_path, 'log.csv')
     if not os.path.isfile(log_file_path):
         with open(log_file_path, 'w+') as f:
@@ -537,7 +537,7 @@ if __name__ == '__main__':
         os.mkdir(current_training_run_path)
         os.mkdir(os.path.join(current_training_run_path, 'checkpoints'))
         os.mkdir(os.path.join(current_training_run_path, 'generations'))
-    setup_log_file(args, current_training_run_path)
+    setup_log_file(current_training_run_path)
     if args.export:
         export_name = f'{args.training_run}_export_epoch{args.start_epoch}'
         export_model(args, state, export_name=export_name)
