@@ -20,6 +20,7 @@ import jax
 import jax.numpy as jnp
 from jax import lax
 from jax.experimental import jax2tf
+import tf2onnx
 import flax.linen as nn
 from flax.training import train_state
 import optax # Optimizers.
@@ -34,16 +35,16 @@ import matplotlib.pyplot as plt
 import fid
 from inference import reverse_diffusion
 
-import tf2onnx
-
 start_epoch = 0 # 0 if training from scratch.
 dataset_path = '../heightmaps/world-heightmaps-01/'
-model_save_path = 'data/pix_checkpoints/'
 model_name = 'pix'
 image_save_path = 'data/pix_training_generations/'
 log_path = 'data/logs/pix.csv'
 in_docker_container = True
-export_path = 'data/temp/pix_exported'
+export_path = 'data/exported'
+master_training_run_path = 'data/training_runs/'
+training_run_name = 'pix'
+current_training_run_path = None
 
 # Sampling.
 min_signal_rate = 0.02
@@ -182,19 +183,6 @@ def diffusion_schedule(diffusion_times):
     noise_rates = jnp.sin(diffusion_angles)
     return noise_rates, signal_rates    
 
-# Training.
-def create_train_state(module, rng, learning_rate, image_width, image_height):
-    x = (jnp.ones([1, image_width, image_height, 1]), jnp.ones([1, 1, 1, 1]))
-    variables = module.init(rng, x)
-    params = variables['params']
-    tx = optax.adam(learning_rate)
-    ts = train_state.TrainState.create(
-        apply_fn=module.apply, 
-        params=params, 
-        tx=tx, 
-    )
-    return ts
-
 @jax.jit
 def train_step(state, images, parent_key):
     noise_key, diffusion_time_key = jax.random.split(parent_key, 2)
@@ -284,9 +272,9 @@ def fid_benchmark(apply_fn, params, stats_path, batch_size, num_samples):
     return fid_value
 
 def save_checkpoint(
-    checkpointer, state, model_save_path, checkpoint_name, in_docker_container
+    checkpointer, state, checkpoint_save_dir, checkpoint_name, in_docker_container
 ):
-    final_save_path = os.path.join(model_save_path, checkpoint_name)
+    final_save_path = os.path.join(checkpoint_save_dir, checkpoint_name)
     if in_docker_container:
         # To read why this is necessary, see: https://github.com/google/orbax/issues/446
         # Save to root owned checkpoints dir.
@@ -320,16 +308,17 @@ def save_generations(
 def get_checkpoint_name(model_name, epoch):
     return f'{model_name}_epoch{epoch}'
 
-if __name__ == '__main__':
+def get_args():
     parser = argparse.ArgumentParser()
+    help_text = (
+        'Name of the training run. All checkpoints and logs for this run will be ' +
+        f'saved in a folder with this name inside of {master_training_run_path}.'
+    )
+    parser.add_argument('--training_run', type=str, default=training_run_name, help=help_text)
     help_text = 'Epoch to start from when resuming training. Starts from scratch if 0.'
     parser.add_argument('--start_epoch', type=int, default=start_epoch, help=help_text)
     help_text = 'Path to training dataset.'
     parser.add_argument('--dataset_path', type=str, default=dataset_path, help=help_text)
-    help_text = 'Path to directory where model checkpoints are saved.'
-    parser.add_argument('--model_save_path', type=str, default=model_save_path, help=help_text)
-    help_text = 'Name of the model. Used for naming checkpoints and training logs.'
-    parser.add_argument('--model_name', type=str, default=model_name, help=help_text)
     help_text = 'Path to directory where images generated at the end of each epoch are saved.'
     parser.add_argument('--image_save_path', type=str, default=image_save_path, help=help_text)
     help_text = 'Path to log file.'
@@ -366,15 +355,31 @@ if __name__ == '__main__':
     help_text = 'Output path for model export. Should include the model name at the end.'
     parser.add_argument('--export_path', type=str, default=export_path, help=help_text)
     args = parser.parse_args()
-    print('GPU:', jax.devices('gpu'))
 
-    if args.use_fid:
-        fid.check_for_correct_setup(args.fid_stats_path)
+    current_training_run_path = os.path.join(master_training_run_path, args.training_run)
+    assertion_text = 'Specified training run does not exist and start_epoch is not 0.'
+    assert args.start_epoch == 0 or os.path.isdir(current_training_run_path), assertion_text
+    return args, current_training_run_path
 
-    if not os.path.isfile(args.log_file):
-        with open(args.log_file, 'w+') as f:
+def setup_log_file(args, current_training_run_path):
+    log_file_path = os.path.join(current_training_run_path, 'log.csv')
+    if not os.path.isfile(log_file_path):
+        with open(log_file_path, 'w+') as f:
             f.write('epoch,loss,val_loss,fid\n')
 
+def create_train_state(module, rng, learning_rate, image_width, image_height):
+    x = (jnp.ones([1, image_width, image_height, 1]), jnp.ones([1, 1, 1, 1]))
+    variables = module.init(rng, x)
+    params = variables['params']
+    tx = optax.adam(learning_rate)
+    ts = train_state.TrainState.create(
+        apply_fn=module.apply, 
+        params=params, 
+        tx=tx, 
+    )
+    return ts
+
+def get_model(args):
     init_rng = jax.random.PRNGKey(0)
     model = DDIM(widths, block_depth)
     state = create_train_state(
@@ -386,45 +391,51 @@ if __name__ == '__main__':
 
     checkpointer = ocp.Checkpointer(ocp.PyTreeCheckpointHandler(use_ocdbt=True))
     if args.start_epoch != 0:
-        checkpoint_name = get_checkpoint_name(args.model_name, args.start_epoch)
-        checkpoint_path = os.path.join(args.model_save_path, checkpoint_name)
+        checkpoint_name = get_checkpoint_name(args.training_run, args.start_epoch)
+        checkpoint_path = os.path.join(
+            current_training_run_path, 'checkpoints', checkpoint_name
+        )
         state = checkpointer.restore(os.path.abspath(checkpoint_path), item=state)
         print(f'Loaded checkpoint for epoch {args.start_epoch}')
     else:
         print('Initialized model from scratch')
+
+    return state, checkpointer
+
+def export_model(args, state, export_name):
+    print('Exporting model...')
+    tf_module = tf.Module()
+    state_vars = tf.nest.map_structure(tf.Variable, state.params)
+    tf_module.vars = tf.nest.flatten(state_vars)
+    predict_fn = jax2tf.convert(
+        state.apply_fn, 
+        enable_xla=False, 
+        native_serialization=False
+    )
+
+    input_signature = [(
+        tf.TensorSpec(shape=(1, image_width, image_height, channels), dtype=tf.float32),
+        tf.TensorSpec(shape=(1, 1, 1, 1), dtype=tf.float32)
+    )]
+    @tf.function(autograph=False, input_signature=input_signature)
+    def predict(data):
+        return predict_fn({'params': state_vars}, data)
     
-    if args.export:
-        print('Exporting model...')
-        tf_module = tf.Module()
-        state_vars = tf.nest.map_structure(tf.Variable, state.params)
-        tf_module.vars = tf.nest.flatten(state_vars)
-        predict_fn = jax2tf.convert(
-            state.apply_fn, 
-            enable_xla=False, 
-            native_serialization=False
+    export_path_with_name = os.path.join(args.export_path, export_name)
+    if args.onnx:
+        proto, external_t = tf2onnx.convert.from_function(
+            predict, 
+            input_signature=input_signature,
+            output_path=args.export_path + '.onnx'
         )
+        print(f'Model exported to ONNX at {export_path_with_name}.onnx')
+    else:
+        tf_module.predict = predict
+        tf.saved_model.save(tf_module, export_path_with_name)
+        print(f'Model exported to TF SavedModel at {export_path_with_name}')
+    exit(0) # Exit because we don't want to train when --export is True.
 
-        input_signature = [(
-            tf.TensorSpec(shape=(1, image_width, image_height, channels), dtype=tf.float32),
-            tf.TensorSpec(shape=(1, 1, 1, 1), dtype=tf.float32)
-        )]
-        @tf.function(autograph=False, input_signature=input_signature)
-        def predict(data):
-            return predict_fn({'params': state_vars}, data)
-        
-        if args.onnx:
-            proto, external_t = tf2onnx.convert.from_function(
-                predict, 
-                input_signature=input_signature,
-                output_path=args.export_path + '.onnx'
-            )
-            print(f'Model exported to ONNX at {args.export_path}.onnx')
-        else:
-            tf_module.predict = predict
-            tf.saved_model.save(tf_module, args.export_path)
-            print(f'Model exported to TF SavedModel at {args.export_path}')
-        exit(0) # Exit because we don't want to train when --export is True.
-
+def get_data_loaders(args):
     idg = ImageDataGenerator(preprocessing_function = preprocessing_function)
     train_iterator = idg.flow_from_directory(
         os.path.join(args.dataset_path, 'train'), 
@@ -440,9 +451,9 @@ if __name__ == '__main__':
         color_mode = 'grayscale',
         classes = ['']
     )
-    steps_per_epoch = len(train_iterator)
-    steps_per_test = len(test_iterator)
+    return train_iterator, test_iterator
 
+def train_loop(args, steps_per_epoch, steps_per_test, state, checkpointer, training_run_path):
     for epoch in range(args.epochs):
         epoch_start_time = datetime.now()
         absolute_epoch = args.start_epoch + epoch + 1
@@ -457,6 +468,8 @@ if __name__ == '__main__':
             train_step_key = jax.random.PRNGKey(absolute_epoch * steps_per_epoch + step)
             loss, state = train_step(state, images, train_step_key)
             losses.append(loss)
+            # temp
+            break
         average_loss = sum(losses) / len(losses)
 
         test_losses = []
@@ -486,12 +499,11 @@ if __name__ == '__main__':
         print(f'Loss: {average_loss}')
         print(f'Validation Loss: {average_test_loss}')
 
-        checkpoint_name = get_checkpoint_name(args.model_name, absolute_epoch)
         save_checkpoint(
             checkpointer = checkpointer, 
             state = state, 
-            model_save_path = args.model_save_path, 
-            checkpoint_name = checkpoint_name,
+            checkpoint_save_dir = os.path.join(training_run_path, 'checkpoints'), 
+            checkpoint_name = get_checkpoint_name(args.training_run, absolute_epoch),
             in_docker_container = args.docker
         )
 
@@ -502,7 +514,7 @@ if __name__ == '__main__':
             image_width = args.image_width, 
             image_height = args.image_height, 
             epoch = absolute_epoch, 
-            save_path = args.image_save_path
+            save_path = os.path.join(training_run_path, 'generations')
         )
 
         fid_value = fid_benchmark(
@@ -514,5 +526,33 @@ if __name__ == '__main__':
         )
         print('FID:', fid_value)
         
-        with open(args.log_file, 'a') as f:
+        with open(os.path.join(training_run_path, 'log.csv'), 'a') as f:
             f.write(f'{absolute_epoch},{average_loss},{average_test_loss},{fid_value}\n')
+
+if __name__ == '__main__':
+    args, current_training_run_path = get_args()
+    print('GPU:', jax.devices('gpu'))
+    if args.use_fid:
+        fid.check_for_correct_setup(args.fid_stats_path)
+    state, checkpointer = get_model(args)
+    if args.start_epoch == 0: # Starting from scratch so setup training run directory.
+        os.mkdir(current_training_run_path)
+        os.mkdir(os.path.join(current_training_run_path, 'checkpoints'))
+        os.mkdir(os.path.join(current_training_run_path, 'generations'))
+    setup_log_file(args, current_training_run_path)
+    if args.export:
+        export_name = f'{args.training_run}_export_epoch{args.start_epoch}'
+        export_model(args, state, export_name=export_name)
+
+    train_iterator, test_iterator = get_data_loaders(args)
+    steps_per_epoch = len(train_iterator)
+    steps_per_test = len(test_iterator)
+
+    train_loop(
+        args, 
+        steps_per_epoch, 
+        steps_per_test, 
+        state, 
+        checkpointer, 
+        current_training_run_path
+    )
