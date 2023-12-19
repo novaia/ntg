@@ -47,26 +47,18 @@ python3.9 -m tf2onnx.convert --saved-model <PATH_TO_SAVED_MODEL> --output <PATH_
 ## Legacy Code
  The ``legacy`` directory contains all the NTG code that was originally implemented in Tensorflow. This code is no longer maintained, but is kept here for reference. In order to run it, use the Docker environment described by the ``legacy/Dockerfile`` and ``legacy/docker-compose.yaml`` files.
 
-## Docker Environment
-
-Building image:
-```
-docker-compose build
-```
-
-Starting container/environment:
+## Container Environment
+Starting the container:
 ```
 docker-compose up -d
 ```
 
-Opening a shell in container:
+Opening a shell in the container:
 ```
-docker-compose exec ntg bash
+docker-compose exec fig bash
 ```
 
-Instead of opening a shell, you can also go to http://localhost:8888/ to access a Jupyter Lab instance running inside the container.
-
-Stopping container/environment:
+Stopping the container:
 ```
 docker-compose down
 ```
