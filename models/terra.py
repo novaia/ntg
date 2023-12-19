@@ -4,6 +4,7 @@ import numpy as np
 from flax import linen as nn
 from flax.training.train_state import TrainState
 from orbax import checkpoint as ocp
+import optax
 
 from nvidia.dali import pipeline_def, fn
 from nvidia.dali.plugin.jax import DALIGenericIterator
@@ -96,9 +97,6 @@ class SinusoidalEmbedding(nn.Module):
 class ResidualBlock(nn.Module):
     num_features: int
     num_groups: int
-    patch_size: int
-    head_dim: int
-    num_heads: int
     kernel_size: int
     activation_fn: Callable
     dtype: Any = jnp.float32
@@ -139,9 +137,7 @@ class DownBlock(nn.Module):
     num_features: int
     num_groups: int
     block_depth: int
-    patch_size: int
-    head_dim: int
-    num_heads: int
+    kernel_size: int
     activation_fn: Callable
     dtype: Any = jnp.float32
     param_dtype: Any = jnp.float32
@@ -152,9 +148,7 @@ class DownBlock(nn.Module):
             x = ResidualBlock(
                 num_features=self.num_features, 
                 num_groups=self.num_groups,
-                patch_size=self.patch_size,
-                head_dim=self.head_dim,
-                num_heads=self.num_heads,
+                kernel_size=self.kernel_size,
                 activation_fn=self.activation_fn,
                 dtype=self.dtype,
                 param_dtype=self.param_dtype
@@ -167,9 +161,7 @@ class UpBlock(nn.Module):
     num_features: int
     num_groups: int
     block_depth: int
-    patch_size: int
-    head_dim: int
-    num_heads: int
+    kernel_size: int
     activation_fn: Callable
     dtype: Any = jnp.float32
     param_dtype: Any = jnp.float32
@@ -184,9 +176,7 @@ class UpBlock(nn.Module):
             x = ResidualBlock(
                 num_features=self.num_features,
                 num_groups=self.num_groups,
-                patch_size=self.patch_size,
-                head_dim=self.head_dim,
-                num_heads=self.num_heads,
+                kernel_size=self.kernel_size,
                 activation_fn=self.activation_fn,
                 dtype=self.dtype,
                 param_dtype=self.param_dtype
@@ -198,10 +188,8 @@ class VanillaDiffusion(nn.Module):
     embedding_max_frequency: float
     num_features: List[int]
     num_groups: List[int]
+    kernel_size: int
     block_depth: int
-    patch_sizes: List[int]
-    head_dims: List[int]
-    num_heads: List[int]
     output_channels: int
     activation_fn: Callable
     dtype: Any = jnp.float32
@@ -216,21 +204,12 @@ class VanillaDiffusion(nn.Module):
         )(diffusion_time)
 
         skips = []
-        block_params = list(zip(
-            self.num_features, 
-            self.num_groups, 
-            self.patch_sizes, 
-            self.head_dims, 
-            self.num_heads
-        ))[:-1]
-        for features, groups, patch, head_dim, heads in block_params:
+        block_params = list(zip(self.num_features, self.num_groups))[:-1]
+        for features, groups in block_params:
             x, skips = DownBlock(
                 num_features=features,
                 num_groups=groups,
                 block_depth=self.block_depth,
-                patch_size=patch,
-                head_dim=head_dim,
-                num_heads=heads,
                 activation_fn=self.activation_fn,
                 dtype=self.dtype,
                 param_dtype=self.param_dtype
@@ -239,21 +218,15 @@ class VanillaDiffusion(nn.Module):
             x = ResidualBlock(
                 num_features=self.num_features[-1],
                 num_groups=self.num_groups[-1],
-                patch_size=self.patch_sizes[-1],
-                head_dim=self.head_dims[-1],
-                num_heads=self.head_dims[-1],
                 activation_fn=self.activation_fn,
                 dtype=self.dtype,
                 param_dtype=self.param_dtype
             )(x, time_emb)
-        for features, groups, patch, head_dim, heads in list(reversed(block_params)):
+        for features, groups in list(reversed(block_params)):
             x, skips = UpBlock(
                 num_features=features,
                 num_groups=groups,
                 block_depth=self.block_depth,
-                patch_size=patch,
-                head_dim=head_dim,
-                num_heads=heads,
                 activation_fn=self.activation_fn,
                 dtype=self.dtype,
                 param_dtype=self.param_dtype
@@ -299,10 +272,6 @@ def train_step(state, images, min_signal_rate, max_signal_rate, noise_clip, key)
     state = state.apply_gradients(grads=grads)
     return loss, state
 
-#@partial(jax.jit, static_argnames=[
-#    'num_images', 'diffusion_steps', 'image_width', 'image_height', 'channels', 
-#    'min_signal_rate', 'max_signal_rate'
-#])
 def reverse_diffusion(
     state, 
     num_images:int, 
@@ -358,10 +327,7 @@ def main():
     parser.add_argument('--save_checkpoints', type=int, choices=[0, 1], default=1)
     parser.add_argument('--checkpoint_path', type=str, default=None)
     args = parser.parse_args()
-
-    if args.wandb == 1:
-        import wandb
-
+    
     # Config string maps.
     activation_fn_map = {'gelu': nn.gelu, 'silu': nn.silu}
     dtype_map = {'float32': jnp.float32, 'bfloat16': jnp.bfloat16}
@@ -395,9 +361,7 @@ def main():
         num_features=config['num_features'],
         num_groups=config['num_groups'],
         block_depth=config['block_depth'],
-        patch_sizes=config['patch_sizes'],
-        head_dims=config['head_dims'],
-        num_heads=config['num_heads'],
+        kernel_size=config['kernel_size'],
         output_channels=config['output_channels'],
         activation_fn=activation_fn,
         dtype=dtype,
@@ -427,7 +391,8 @@ def main():
     if args.checkpoint_path is not None:
         state = checkpointer.restore(args.checkpoint_path, item=state)
 
-    if args.wandb == 1: 
+    if args.wandb == 1:
+        import wandb
         wandb.init(project='vanilla-diffusion', config=config)
 
     print('Steps per epoch', steps_per_epoch)
