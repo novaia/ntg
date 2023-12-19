@@ -1,8 +1,9 @@
 services:
   ntg:
     build: .
-    ports:
-      - 8888:8888
+    image: ntg
+    container_name: ntg
+    tty: true
     volumes:
       - .:/project
       - ../heightmaps:/heightmaps

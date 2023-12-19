@@ -12,7 +12,3 @@ COPY requirements.txt requirements.txt
 RUN python3.9 -m pip install --upgrade pip
 RUN python3.9 -m pip install "jax[cuda11_cudnn86]" -f https://storage.googleapis.com/jax-releases/jax_cuda_releases.html
 RUN python3.9 -m pip install -r requirements.txt
-
-EXPOSE 8888
-
-ENTRYPOINT ["jupyter", "lab", "--ip=0.0.0.0", "--allow-root", "--no-browser", "--NotebookApp.token=''", "--NotebookApp.password=''"]
