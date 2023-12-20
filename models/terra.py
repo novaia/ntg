@@ -8,67 +8,66 @@ import optax
 
 from nvidia.dali import pipeline_def, fn
 from nvidia.dali.plugin.jax import DALIGenericIterator
+from nvidia.dali.plugin.base_iterator import LastBatchPolicy
 from nvidia.dali import types as dali_types
 
 from PIL import Image
+import pandas as pd
 
 from typing import Any, Callable, List
-from random import shuffle
 from functools import partial
 from datetime import datetime
 import argparse
 import json
 import math
 import os
-import glob
 
-class ExternalInputIterator(object):
-    def __init__(self, paths, batch_size):
-        self.batch_size = batch_size
-        self.paths = paths
-        shuffle(self.paths)
-
-    def __iter__(self):
-        self.i = 0
-        self.n = len(self.paths)
-        return self
-
-    def __next__(self):
-        batch = []
-        for _ in range(self.batch_size):
-            jpeg_path = self.paths[self.i]
-            with open(jpeg_path, 'rb') as f:
-                batch.append(np.frombuffer(f.read(), dtype=np.uint8))
-            self.i = (self.i + 1) % self.n
-        return batch
-
-def get_data_iterator(dataset_path, batch_size, num_threads=3):
-    abs_dataset_path = os.path.abspath(dataset_path)
-    paths = glob.glob(f'{abs_dataset_path}/*/*')
-    shuffle(paths)
-    steps_per_epoch = len(paths) // batch_size
-    external_iterator = ExternalInputIterator(paths, batch_size)
-
+def get_data_iterator(
+    dataset_path:str, image_height:int, image_width:int, batch_size:int, num_threads:int = 3
+):
     @pipeline_def
-    def my_pipeline_def(source):
-        jpegs = fn.external_source(
-            source=source, 
-            dtype=dali_types.UINT8,
+    def my_pipeline_def(files, image_height, image_width, file_root):
+        image_files = fn.readers.file(
+            files=files, 
+            file_root=file_root, 
+            read_ahead=True, 
+            shuffle_after_epoch=True, 
+            device='cpu'
+        )[0]
+        images = fn.decoders.image(
+            image_files, 
+            device='mixed', 
+            output_type=dali_types.GRAY, 
+            preallocate_height_hint=image_height,
+            preallocate_width_hint=image_width
         )
-        images = fn.decoders.image(jpegs, device='cpu', output_type=dali_types.RGB)
-        images = fn.cast(images, dtype=dali_types.FLOAT)
-        images = images / dali_types.Constant(127.5).float32()
-        images = images - dali_types.Constant(1.0).float32()
-        return images
+        flipped = fn.flip(
+            images, 
+            vertical=fn.random.coin_flip(device='cpu'), 
+            horizontal=fn.random.coin_flip(device='cpu'), 
+            device='gpu'
+        )
+        casted = fn.cast(flipped, dtype=dali_types.FLOAT)
+        scale_constant = dali_types.Constant(127.5).float32()
+        shift_constant = dali_types.Constant(1.0).float32()
+        normalized = (casted / scale_constant) - shift_constant
+        return normalized
     
-    train_pipeline = my_pipeline_def(
-        source=external_iterator, 
+    file_names = list(pd.read_csv(os.path.join(dataset_path, 'metadata.csv'))['file_name'])
+    steps_per_epoch = len(file_names) // batch_size
+    data_pipeline = my_pipeline_def(
+        files=file_names,
+        file_root=dataset_path,
+        image_height=image_height,
+        image_width=image_width,
         batch_size=batch_size, 
         num_threads=num_threads, 
         device_id=0
     )
-    train_iterator = DALIGenericIterator(pipelines=[train_pipeline], output_map=['x'])
-    return train_iterator, steps_per_epoch
+    data_iterator = DALIGenericIterator(
+        pipelines=[data_pipeline], output_map=['x'], last_batch_policy=LastBatchPolicy.DROP
+    )
+    return data_iterator, steps_per_epoch
 
 class SinusoidalEmbedding(nn.Module):
     embedding_dim:int
@@ -116,7 +115,6 @@ class ResidualBlock(nn.Module):
             self.num_features, kernel_size=(self.kernel_size, self.kernel_size), 
             dtype=self.dtype, param_dtype=self.param_dtype
         )(x)
-        x = nn.GroupNorm(self.num_groups, dtype=self.dtype, param_dtype=self.param_dtype)(x)
         x = self.activation_fn(x)
         time_emb = nn.Dense(
             self.num_features, dtype=self.dtype, param_dtype=self.param_dtype
@@ -210,6 +208,7 @@ class VanillaDiffusion(nn.Module):
                 num_features=features,
                 num_groups=groups,
                 block_depth=self.block_depth,
+                kernel_size=self.kernel_size,
                 activation_fn=self.activation_fn,
                 dtype=self.dtype,
                 param_dtype=self.param_dtype
@@ -218,6 +217,7 @@ class VanillaDiffusion(nn.Module):
             x = ResidualBlock(
                 num_features=self.num_features[-1],
                 num_groups=self.num_groups[-1],
+                kernel_size=self.kernel_size,
                 activation_fn=self.activation_fn,
                 dtype=self.dtype,
                 param_dtype=self.param_dtype
@@ -227,6 +227,7 @@ class VanillaDiffusion(nn.Module):
                 num_features=features,
                 num_groups=groups,
                 block_depth=self.block_depth,
+                kernel_size=self.kernel_size,
                 activation_fn=self.activation_fn,
                 dtype=self.dtype,
                 param_dtype=self.param_dtype
@@ -325,9 +326,17 @@ def main():
     parser.add_argument('--wandb', type=int, choices=[0, 1], default=1)
     parser.add_argument('--epochs_between_previews', type=int, default=1)
     parser.add_argument('--save_checkpoints', type=int, choices=[0, 1], default=1)
-    parser.add_argument('--checkpoint_path', type=str, default=None)
+    parser.add_argument('--checkpoint', type=str, default=None)
+    parser.add_argument('--run_dir', type=str, default='data/terra_runs/0')
     args = parser.parse_args()
     
+    checkpoint_save_dir = os.path.join(args.run_dir, 'checkpoints')
+    image_save_dir = os.path.join(args.run_dir, 'checkpoints')
+    if not os.path.exists(checkpoint_save_dir):
+        os.makedirs(checkpoint_save_dir)
+    if not os.path.exists(image_save_dir):
+        os.makedirs(image_save_dir)
+
     # Config string maps.
     activation_fn_map = {'gelu': nn.gelu, 'silu': nn.silu}
     dtype_map = {'float32': jnp.float32, 'bfloat16': jnp.bfloat16}
@@ -385,11 +394,16 @@ def main():
     config['param_count'] = param_count
     print('Param count', param_count)
 
-    data_iterator, steps_per_epoch = get_data_iterator(args.dataset, config['batch_size'])
+    data_iterator, steps_per_epoch = get_data_iterator(
+        dataset_path=args.dataset, 
+        image_height=config['image_size'],
+        image_width=config['image_size'],
+        batch_size=config['batch_size']
+    )
 
     checkpointer = ocp.Checkpointer(ocp.PyTreeCheckpointHandler(use_ocdbt=True))
-    if args.checkpoint_path is not None:
-        state = checkpointer.restore(args.checkpoint_path, item=state)
+    if args.checkpoint is not None:
+        state = checkpointer.restore(args.checkpoint, item=state)
 
     if args.wandb == 1:
         import wandb
@@ -401,10 +415,8 @@ def main():
     noise_clip = config['noise_clip']
     for epoch in range(config['epochs']):
         epoch_start_time = datetime.now()
-        for _ in range(steps_per_epoch):
-            images = next(data_iterator)['x']
-            images = jnp.array(images, dtype=jnp.float32)
-            images = jax.device_put(images, gpu)
+        for batch in data_iterator:
+            images = batch['x']
             step_key = jax.random.PRNGKey(state.step)
             loss, state = train_step(
                 state, images, min_signal_rate, max_signal_rate, noise_clip, step_key
@@ -420,7 +432,7 @@ def main():
 
         if args.save_checkpoints == 1:
             checkpointer.save(
-                f'data/vanilla_diffusion_checkpoints/vd_step_{state.step}', state, force=True
+                os.path.join(checkpoint_save_dir, f'step{state.step}'), state, force=True
             )
         if epoch % args.epochs_between_previews != 0:
             continue
@@ -442,7 +454,7 @@ def main():
         generated_images = np.array(generated_images, dtype=np.uint8)
         for i in range(generated_images.shape[0]):
             image = Image.fromarray(generated_images[i])
-            image.save(f'data/vanilla_diffusion_output/step{state.step}_image{i}.png')
+            image.save(os.path.join(image_save_dir, f'{state.step}_image{i}.png'))
 
 if __name__ == '__main__':
     main()
