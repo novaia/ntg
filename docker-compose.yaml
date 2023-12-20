@@ -6,7 +6,7 @@ services:
     tty: true
     volumes:
       - .:/project
-      - ../heightmaps:/heightmaps
+      - ../../datasets/world-heightmaps-256-v1:/datasets/world-heightmaps-256-v1
     ports:
       - 7272:8888
     deploy:
