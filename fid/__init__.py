@@ -1,9 +1,8 @@
-"""
-Frechet Inception Distance.
-Mostly taken from: https://github.com/matthias-wright/jax-fid/tree/main
-License: https://github.com/matthias-wright/jax-fid/blob/main/LICENSE
-The code in this file was modified from the original.
-"""
+# Frechet Inception Distance.
+# Mostly taken from: https://github.com/matthias-wright/jax-fid/tree/main
+# License: https://github.com/matthias-wright/jax-fid/blob/main/LICENSE
+# The code in this file was modified from the original.
+
 import jax
 import functools
 from tqdm import tqdm

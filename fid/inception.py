@@ -1,10 +1,8 @@
-"""
-Inception for calculating FID.
-Doesn't include head and only loads precomputed weights.
-Mostly taken from: https://github.com/matthias-wright/jax-fid/tree/main
-License: https://github.com/matthias-wright/jax-fid/blob/main/LICENSE
-The code in this file was modified from the original.
-"""
+# Inception for calculating FID.
+# Doesn't include head and only loads precomputed weights.
+# Mostly taken from: https://github.com/matthias-wright/jax-fid/tree/main
+# License: https://github.com/matthias-wright/jax-fid/blob/main/LICENSE
+# The code in this file was modified from the original.
 
 import flax.linen as nn
 import jax.numpy as jnp
