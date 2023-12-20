@@ -398,7 +398,7 @@ def main():
                 state, images, min_signal_rate, max_signal_rate, noise_clip, step_key
             )
             if args.wandb == 1: 
-                if state.step+1 % args.steps_between_wandb_logs == 0:
+                if state.step % args.steps_between_wandb_logs == 0:
                     wandb.log({'loss': loss}, step=state.step)
             else:
                 print(state.step, loss)
@@ -411,7 +411,7 @@ def main():
             checkpointer.save(
                 os.path.join(checkpoint_save_dir, f'step{state.step}'), state, force=True
             )
-        if epoch+1 % args.epochs_between_previews != 0:
+        if (epoch+1) % args.epochs_between_previews != 0:
             continue
 
         generated_images = reverse_diffusion(
