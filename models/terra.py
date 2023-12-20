@@ -317,17 +317,8 @@ def main():
     gpu = jax.devices('gpu')[0]
     print(gpu)
 
-    parser = argparse.ArgumentParser()
-    parser.add_argument('--config', type=str, required=True)
-    parser.add_argument('--dataset', type=str, required=True)
-    parser.add_argument('--wandb', type=int, choices=[0, 1], default=1)
-    parser.add_argument('--epochs_between_previews', type=int, default=1)
-    parser.add_argument('--steps_between_wandb_logs', type=int, default=200)
-    parser.add_argument('--save_checkpoints', type=int, choices=[0, 1], default=1)
-    parser.add_argument('--checkpoint', type=str, default=None)
-    parser.add_argument('--run_dir', type=str, default='data/terra_runs/0')
-    args = parser.parse_args()
-    
+    args = config_utils.parse_args(default_run_dir='data/terra_runs/0')
+
     checkpoint_save_dir = os.path.join(args.run_dir, 'checkpoints')
     image_save_dir = os.path.join(args.run_dir, 'checkpoints')
     if not os.path.exists(checkpoint_save_dir):
@@ -367,7 +358,11 @@ def main():
         dtype=dtype
     )
     diffusion_times = jnp.ones((config['batch_size'], 1, 1, 1), dtype=dtype)
-    params = model.init(jax.random.PRNGKey(0), x, diffusion_times)['params']
+    model_key = jax.random.PRNGKey(0)
+    if args.tabulate:
+        print(model.tabulate(model_key, x, diffusion_times))
+        exit(0)
+    params = model.init(model_key, x, diffusion_times)['params']
     tx = optax.adam(config['learning_rate'])
     state = TrainState.create(apply_fn=model.apply, params=params, tx=tx)
     
