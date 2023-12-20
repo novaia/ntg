@@ -22,6 +22,8 @@ import json
 import math
 import os
 
+from models.common import config_utils
+
 def get_data_iterator(
     dataset_path:str, image_height:int, image_width:int, batch_size:int, num_threads:int = 3
 ):
@@ -252,11 +254,6 @@ def diffusion_schedule(diffusion_times, min_signal_rate, max_signal_rate):
 def train_step(state, images, min_signal_rate, max_signal_rate, noise_clip, key):
     noise_key, diffusion_time_key = jax.random.split(key, 2)
     noises = jax.random.normal(noise_key, images.shape, dtype=jnp.float32)
-    # Clipping the noise prevents NaN loss when train_step is compiled on GPU, however this 
-    # diverges from the math of typical diffusion models since the noise is no longer Gaussian. 
-    # Standardizing the images to 0 mean and unit variance might have the same effect while 
-    # remaining in line with standard practice. Setting NaN gradients to 0 also prevents NaN 
-    # loss, but it feels kind of hacky and might obscure other numerical issues. 
     noises = jnp.clip(noises, -noise_clip, noise_clip)
     diffusion_times = jax.random.uniform(diffusion_time_key, (images.shape[0], 1, 1, 1))
     noise_rates, signal_rates = diffusion_schedule(
@@ -325,6 +322,7 @@ def main():
     parser.add_argument('--dataset', type=str, required=True)
     parser.add_argument('--wandb', type=int, choices=[0, 1], default=1)
     parser.add_argument('--epochs_between_previews', type=int, default=1)
+    parser.add_argument('--steps_between_wandb_logs', type=int, default=200)
     parser.add_argument('--save_checkpoints', type=int, choices=[0, 1], default=1)
     parser.add_argument('--checkpoint', type=str, default=None)
     parser.add_argument('--run_dir', type=str, default='data/terra_runs/0')
@@ -337,32 +335,15 @@ def main():
     if not os.path.exists(image_save_dir):
         os.makedirs(image_save_dir)
 
-    # Config string maps.
-    activation_fn_map = {'gelu': nn.gelu, 'silu': nn.silu}
-    dtype_map = {'float32': jnp.float32, 'bfloat16': jnp.bfloat16}
-
     with open(args.config, 'r') as f:
         config = json.load(f)
     assert len(config['num_features']) == len(config['num_groups']), (
         'len(num_features) must equal len(num_groups).'
     )
-    activation_fn_name = config['activation_fn']
-    assert activation_fn_name in activation_fn_map.keys(), (
-        f'Invalid activation function: {activation_fn_name}. ',
-        f'Must be one of the following: {activation_fn_map.keys()}.'
-    )
-    activation_fn = activation_fn_map[activation_fn_name]
-    dtype_name = config['dtype']
-    assert dtype_name in dtype_map.keys(), (
-        f'Invalid dtype: {dtype_name}. Must be one of the following: {dtype_map.keys()}/'
-    )
-    dtype = dtype_map[dtype_name]
-    param_dtype_name = config['param_dtype']
-    assert param_dtype_name in dtype_map.keys(), (
-        f'Invalid param dtype: {param_dtype_name}.'
-        f'Must be one of the following: {dtype_map.keys()}.'
-    )
-    param_dtype = dtype_map[param_dtype_name]
+    
+    activation_fn = config_utils.load_activation_fn(config['activation_fn'])
+    dtype = config_utils.load_dtype(config['dtype'])
+    param_dtype = config_utils.load_dtype(config['param_dtype'])
 
     model = VanillaDiffusion(
         embedding_dim=config['embedding_dim'],
@@ -407,7 +388,7 @@ def main():
 
     if args.wandb == 1:
         import wandb
-        wandb.init(project='vanilla-diffusion', config=config)
+        wandb.init(project='ntg-terra', config=config)
 
     print('Steps per epoch', steps_per_epoch)
     min_signal_rate = config['min_signal_rate']
@@ -422,7 +403,8 @@ def main():
                 state, images, min_signal_rate, max_signal_rate, noise_clip, step_key
             )
             if args.wandb == 1: 
-                wandb.log({'loss': loss}, step=state.step)
+                if state.step+1 % args.steps_between_wandb_logs == 0:
+                    wandb.log({'loss': loss}, step=state.step)
             else:
                 print(state.step, loss)
         epoch_end_time = datetime.now()
@@ -434,7 +416,7 @@ def main():
             checkpointer.save(
                 os.path.join(checkpoint_save_dir, f'step{state.step}'), state, force=True
             )
-        if epoch % args.epochs_between_previews != 0:
+        if epoch+1 % args.epochs_between_previews != 0:
             continue
 
         generated_images = reverse_diffusion(
