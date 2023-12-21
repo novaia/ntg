@@ -320,7 +320,7 @@ def main():
     args = config_utils.parse_args(default_run_dir='data/terra_runs/0')
 
     checkpoint_save_dir = os.path.join(args.run_dir, 'checkpoints')
-    image_save_dir = os.path.join(args.run_dir, 'checkpoints')
+    image_save_dir = os.path.join(args.run_dir, 'images')
     if not os.path.exists(checkpoint_save_dir):
         os.makedirs(checkpoint_save_dir)
     if not os.path.exists(image_save_dir):
@@ -402,7 +402,6 @@ def main():
                     wandb.log({'loss': loss}, step=state.step)
             else:
                 print(state.step, loss)
-            break
         epoch_end_time = datetime.now()
         print(
             f'Epoch {epoch} completed in {epoch_end_time-epoch_start_time} at {epoch_end_time}'
@@ -432,8 +431,8 @@ def main():
         generated_images = jnp.clip(generated_images, 0.0, 255.0)
         generated_images = np.array(generated_images, dtype=np.uint8)
         for i in range(generated_images.shape[0]):
-            image = Image.fromarray(generated_images[i])
-            image.save(os.path.join(image_save_dir, f'{state.step}_image{i}.png'))
+            image = Image.fromarray(generated_images[i].squeeze(axis=-1))
+            image.save(os.path.join(image_save_dir, f'step{state.step}_image{i}.png'))
 
 if __name__ == '__main__':
     main()
