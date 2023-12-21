@@ -32,12 +32,7 @@ Full list of parameters:
 - ``--mmap_filename``: Name for mmap file. Only used if mmap is True. Default: ``data/temp/mmap_file``
 
 ## Models
-- [Pix](./models/pix.py): Vanilla implicit diffusion model (DDIM).
-- [Hyper](./models/hyper.py): Latent implicit diffusion model.
-
-To train these models, simply run their corresponding python script. Currently, only Pix is trainable.
-
-For more detail information on these models, as well as a complete list of script parameters for each, see [MODELS.md](./MODELS.md).
+- [Terra](./models/terra.py): Purely convolutional diffusion model.
 
 ## Converting TF SavedModel to ONNX
 ```
