@@ -55,7 +55,7 @@ docker-compose up -d
 
 Opening a shell in the container:
 ```
-docker-compose exec fig bash
+docker-compose exec ntg bash
 ```
 
 Stopping the container:
