@@ -402,6 +402,7 @@ def main():
                     wandb.log({'loss': loss}, step=state.step)
             else:
                 print(state.step, loss)
+            break
         epoch_end_time = datetime.now()
         print(
             f'Epoch {epoch} completed in {epoch_end_time-epoch_start_time} at {epoch_end_time}'
@@ -409,7 +410,8 @@ def main():
 
         if args.save_checkpoints == 1:
             checkpointer.save(
-                os.path.join(checkpoint_save_dir, f'step{state.step}'), state, force=True
+                os.path.join('/project/', checkpoint_save_dir, f'step{state.step}'), 
+                state, force=True
             )
         if (epoch+1) % args.epochs_between_previews != 0:
             continue
