@@ -391,8 +391,8 @@ def main():
     noise_clip = config['noise_clip']
     for epoch in range(config['epochs']):
         epoch_start_time = datetime.now()
-        for batch in data_iterator:
-            images = batch['x']
+        for _ in range(steps_per_epoch):
+            images = next(data_iterator)['x']
             step_key = jax.random.PRNGKey(state.step)
             loss, state = train_step(
                 state, images, min_signal_rate, max_signal_rate, noise_clip, step_key
