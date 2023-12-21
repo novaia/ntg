@@ -44,9 +44,6 @@ For more detail information on these models, as well as a complete list of scrip
 python3.9 -m tf2onnx.convert --saved-model <PATH_TO_SAVED_MODEL> --output <PATH_TO_OUTPUT_MODEL>.onnx
 ```
 
-## Legacy Code
- The ``legacy`` directory contains all the NTG code that was originally implemented in Tensorflow. This code is no longer maintained, but is kept here for reference. In order to run it, use the Docker environment described by the ``legacy/Dockerfile`` and ``legacy/docker-compose.yaml`` files.
-
 ## Container Environment
 Starting the container:
 ```
