@@ -358,8 +358,14 @@ def main():
         print(model.tabulate(model_key, x, diffusion_times))
         exit(0)
     params = model.init(model_key, x, diffusion_times)['params']
+    lr_schedule = optax.exponential_decay(
+        init_value=config['learning_rate'],
+        transition_steps=config['lr_decay_steps'],
+        transition_begin=config['lr_decay_begin'],
+        decay_rate=config['lr_decay_rate'],
+    )
     tx = optax.adamw(
-        learning_rate=config['learning_rate'],
+        learning_rate=lr_schedule,
         b1=config['adam_b1'],
         b2=config['adam_b2'],
         eps=config['adam_eps'],
