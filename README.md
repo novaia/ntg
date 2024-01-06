@@ -37,7 +37,7 @@ Full list of parameters:
 - ``--mmap_filename``: Name for mmap file. Only used if mmap is True. Default: ``data/temp/mmap_file``
 
 ## Models
-- [Terra](./models/terra.py): Purely convolutional diffusion model.
+- [Terra](./models/terra.py): a purely convolutional diffusion model.
 
 ## Converting TF SavedModel to ONNX
 ```
