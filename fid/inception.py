@@ -19,7 +19,7 @@ Shape = Tuple[int]
 Dtype = Any
 
 class InceptionV3(nn.Module):
-    checkpoint_path: str = 'data/inception_v3_weights_fid_old.pickle'
+    checkpoint_path: str = 'data/inception_v3_fid.pickle'
     dtype: str = 'float32'
     num_classes: int = 1000
 
