@@ -9,15 +9,22 @@ Neural Terrain Generation (NTG) is a collection of generative neural networks th
 After cloning, create a directory at the root of the repository called ``data``.
 
 ## Computing FID Stats
-Before starting a training run, you must compute the FID stats for the dataset you are using. This is done by running: 
+In order to compute FID stats, you'll need pretrained InceptionV3 weights. You can get these [here](https://huggingface.co/hayden-donnelly/inception-v3-fid/tree/main)
+in the form of ``inception_v3_fid.pickle``. Once you've downloaded this file, place it in the ``data`` directory at the root of the repository.
+
+If you would like to track FID as a model trains, you'll need to pre-compute the FID stats for the target dataset.
+This can be done by running the following command:
 ```
 python fid --precompute --img_dir <PATH_TO_DATASET> --out_dir <PATH_TO_OUTPUT_DIRECTORY> --img_size <WIDTH> <HEIGHT>
 ```
-Here's a specific example of this command:
+Here's a specific example of the command:
 ```
 python fid --precompute --img_dir ../heightmaps/world-heightmaps-01 --out_dir data/dataset_info --img_size 256 256
 ```
-Note that fid is structured as a Python package, so you don't have to add the ``.py`` extension when running it.
+Outside of training, the FID of two datasets can be computed by specifying the path1 and path2 arguments instead of the img_dir argument:
+```
+python fid --path1 <PATH_TO_DATASET1> --path2 <PATH_TO_DATASET2> --out_dir <PATH_TO_OUTPUT_DIRECTORY> --img_size <WIDTH> <HEIGHT>
+```
 
 Full list of parameters:
 - ``--path1``: Path to image directory or .npz file containing pre-computed statistics. Default: ``None``
