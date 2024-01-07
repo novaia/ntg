@@ -24,6 +24,14 @@ import os
 from models.common import config_utils
 from sampling.diffusion import implicit as sample_implicit
 
+def save_samples(samples:jax.Array, step:int, save_dir:str):
+    samples = ((samples + 1.0) / 2.0) * 255.0
+    samples = jnp.clip(samples, 0.0, 255.0)
+    samples = np.array(samples, dtype=np.uint8)
+    for i in range(samples.shape[0]):
+        image = Image.fromarray(samples[i].squeeze(axis=-1))
+        image.save(os.path.join(save_dir, f'step{step}_image{i}.png'))
+
 def get_data_iterator(
     dataset_path:str, image_height:int, image_width:int, batch_size:int, num_threads:int = 3
 ):
@@ -273,11 +281,14 @@ def main():
     args = config_utils.parse_args(default_run_dir='data/terra_runs/0')
 
     checkpoint_save_dir = os.path.join(args.run_dir, 'checkpoints')
-    image_save_dir = os.path.join(args.run_dir, 'images')
+    fixed_seed_save_dir = os.path.join(args.run_dir, 'images/fixed')
+    dynamic_seed_save_dir = os.path.join(args.run_dir, 'images/dynamic')
     if not os.path.exists(checkpoint_save_dir):
         os.makedirs(checkpoint_save_dir)
-    if not os.path.exists(image_save_dir):
-        os.makedirs(image_save_dir)
+    if not os.path.exists(fixed_seed_save_dir):
+        os.makedirs(fixed_seed_save_dir)
+    if not os.path.exists(dynamic_seed_save_dir):
+        os.makedirs(dynamic_seed_save_dir)
 
     with open(args.config, 'r') as f:
         config = json.load(f)
@@ -342,6 +353,7 @@ def main():
         image_width=config['image_size'],
         batch_size=config['batch_size']
     )
+    print('Steps per epoch', steps_per_epoch)
 
     checkpointer = ocp.Checkpointer(ocp.PyTreeCheckpointHandler(use_ocdbt=True))
     if args.checkpoint is not None:
@@ -351,10 +363,23 @@ def main():
         import wandb
         wandb.init(project='ntg-terra', config=config)
 
-    print('Steps per epoch', steps_per_epoch)
     min_signal_rate = config['min_signal_rate']
     max_signal_rate = config['max_signal_rate']
     noise_clip = config['noise_clip']
+    sample_fn = partial(
+        sample_implicit,
+        state=state, 
+        num_images=8,
+        diffusion_steps=20,
+        diffusion_schedule=diffusion_schedule,
+        image_width=config['image_size'],
+        image_height=config['image_size'],
+        channels=config['output_channels'],
+        min_signal_rate=min_signal_rate,
+        max_signal_rate=max_signal_rate,
+        noise_clip=noise_clip,
+    )
+
     for epoch in range(config['epochs']):
         epoch_start_time = datetime.now()
         for _ in range(steps_per_epoch):
@@ -381,24 +406,10 @@ def main():
         if (epoch+1) % args.epochs_between_previews != 0:
             continue
 
-        generated_images = sample_implicit(
-            state=state, 
-            num_images=8,
-            diffusion_steps=20,
-            image_width=config['image_size'],
-            image_height=config['image_size'],
-            channels=config['output_channels'],
-            min_signal_rate=min_signal_rate,
-            max_signal_rate=max_signal_rate,
-            noise_clip=noise_clip,
-            seed=epoch
-        )
-        generated_images = ((generated_images + 1.0) / 2.0) * 255.0
-        generated_images = jnp.clip(generated_images, 0.0, 255.0)
-        generated_images = np.array(generated_images, dtype=np.uint8)
-        for i in range(generated_images.shape[0]):
-            image = Image.fromarray(generated_images[i].squeeze(axis=-1))
-            image.save(os.path.join(image_save_dir, f'step{state.step}_image{i}.png'))
+        fixed_seed_samples = sample_fn(seed=0)
+        dynamic_seed_samples = sample_fn(seed=state.step)
+        save_samples(fixed_seed_samples, state.step, fixed_seed_save_dir)
+        save_samples(dynamic_seed_samples, state.step, dynamic_seed_save_dir)
 
 if __name__ == '__main__':
     main()
