@@ -22,6 +22,7 @@ import math
 import os
 
 from models.common import config_utils
+from sampling.diffusion import implicit as sample_implicit
 
 def get_data_iterator(
     dataset_path:str, image_height:int, image_width:int, batch_size:int, num_threads:int = 3
@@ -265,49 +266,6 @@ def train_step(state, images, min_signal_rate, max_signal_rate, noise_clip, key)
     state = state.apply_gradients(grads=grads)
     return loss, state
 
-def reverse_diffusion(
-    state, 
-    num_images:int, 
-    diffusion_steps:int, 
-    image_width:int, 
-    image_height:int, 
-    channels:int,
-    min_signal_rate:float,
-    max_signal_rate:float,
-    noise_clip:float,
-    seed:int, 
-):
-    @jax.jit
-    def inference_fn(state, noisy_images, diffusion_times):
-        return jax.lax.stop_gradient(
-            state.apply_fn({'params': state.params}, noisy_images, diffusion_times)
-        )
-    
-    initial_noise = jax.random.normal(
-        jax.random.PRNGKey(seed), 
-        shape=(num_images, image_height, image_width, channels)
-    )
-    initial_noise = jnp.clip(initial_noise, -noise_clip, noise_clip)
-    step_size = 1.0 / diffusion_steps
-    
-    next_noisy_images = initial_noise
-    for step in range(diffusion_steps):
-        noisy_images = next_noisy_images
-        
-        diffusion_times = jnp.ones((num_images, 1, 1, 1)) - step * step_size
-        noise_rates, signal_rates = diffusion_schedule(
-            diffusion_times, min_signal_rate, max_signal_rate
-        )
-        pred_noises = inference_fn(state, noisy_images, noise_rates**2)
-        pred_images = (noisy_images - noise_rates * pred_noises) / signal_rates
-        
-        next_diffusion_times = diffusion_times - step_size
-        next_noise_rates, next_signal_rates = diffusion_schedule(
-            next_diffusion_times, min_signal_rate, max_signal_rate
-        )
-        next_noisy_images = (next_signal_rates * pred_images + next_noise_rates * pred_noises)
-    return pred_images
-
 def main():
     gpu = jax.devices('gpu')[0]
     print(gpu)
@@ -423,7 +381,7 @@ def main():
         if (epoch+1) % args.epochs_between_previews != 0:
             continue
 
-        generated_images = reverse_diffusion(
+        generated_images = sample_implicit(
             state=state, 
             num_images=8,
             diffusion_steps=20,
