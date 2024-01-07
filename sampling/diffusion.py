@@ -1,12 +1,15 @@
 import jax
 from jax import numpy as jnp
 
+from typing import Callable
+
 # TODO: figure out what this sampling method is called, it is implicit reverse diffusion
 # since it skips steps but I'm pretty sure there is a more specific name.
 def implicit(
     state, 
     num_images:int, 
     diffusion_steps:int, 
+    diffusion_schedule:Callable,
     image_width:int, 
     image_height:int, 
     channels:int,
