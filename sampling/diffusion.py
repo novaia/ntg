@@ -1,4 +1,4 @@
-from jax import lax
+import jax
 from jax import numpy as jnp
 
 # TODO: figure out what this sampling method is called, it is implicit reverse diffusion
@@ -17,7 +17,7 @@ def implicit(
 ):
     @jax.jit
     def inference_fn(state, noisy_images, diffusion_times):
-        return lax.stop_gradient(
+        return jax.lax.stop_gradient(
             state.apply_fn({'params': state.params}, noisy_images, diffusion_times)
         )
     
