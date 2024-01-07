@@ -369,7 +369,7 @@ def main():
     sample_fn = partial(
         sample_implicit,
         state=state, 
-        num_images=8,
+        num_images=16,
         diffusion_steps=20,
         diffusion_schedule=diffusion_schedule,
         image_width=config['image_size'],
