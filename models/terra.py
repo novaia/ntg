@@ -177,7 +177,7 @@ class UpBlock(nn.Module):
             )(x)
         return x, skips
 
-class VanillaDiffusion(nn.Module):
+class Terra(nn.Module):
     embedding_dim: int
     embedding_max_frequency: float
     num_features: List[int]
@@ -289,7 +289,7 @@ def main():
     dtype = config_utils.load_dtype(config['dtype'])
     param_dtype = config_utils.load_dtype(config['param_dtype'])
 
-    model = VanillaDiffusion(
+    model = Terra(
         embedding_dim=config['embedding_dim'],
         embedding_max_frequency=config['embedding_max_frequency'],
         num_features=config['num_features'],
