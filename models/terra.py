@@ -296,6 +296,14 @@ def main():
         'len(num_features) must equal len(num_groups).'
     )
     
+    data_iterator, steps_per_epoch = get_data_iterator(
+        dataset_path=args.dataset, 
+        image_height=config['image_size'],
+        image_width=config['image_size'],
+        batch_size=config['batch_size']
+    )
+    print('Steps per epoch', steps_per_epoch)
+
     activation_fn = config_utils.load_activation_fn(config['activation_fn'])
     dtype = config_utils.load_dtype(config['dtype'])
     param_dtype = config_utils.load_dtype(config['param_dtype'])
@@ -327,11 +335,16 @@ def main():
         print(model.tabulate(model_key, x, diffusion_times))
         exit(0)
     params = model.init(model_key, x, diffusion_times)['params']
-    lr_schedule = optax.exponential_decay(
-        init_value=config['learning_rate'],
-        transition_steps=config['lr_decay_steps'],
-        transition_begin=config['lr_decay_begin'],
+    
+    epochs_to_steps = partial(lambda steps, epochs: int(steps * epochs), steps=steps_per_epoch)
+    lr_schedule = optax.warmup_exponential_decay_schedule(
+        init_value=config['lr_base'],
+        peak_value=config['lr_max'],
+        warmup_steps=epochs_to_steps(epochs=config['lr_warmup_epochs']),
+        transition_steps=epochs_to_steps(epochs=config['lr_decay_epochs']),
         decay_rate=config['lr_decay_rate'],
+        staircase=False,
+        end_value=config['lr_min']
     )
     tx = optax.adamw(
         learning_rate=lr_schedule,
@@ -346,14 +359,6 @@ def main():
     param_count = sum(x.size for x in jax.tree_util.tree_leaves(state.params))
     config['param_count'] = param_count
     print('Param count', param_count)
-
-    data_iterator, steps_per_epoch = get_data_iterator(
-        dataset_path=args.dataset, 
-        image_height=config['image_size'],
-        image_width=config['image_size'],
-        batch_size=config['batch_size']
-    )
-    print('Steps per epoch', steps_per_epoch)
 
     checkpointer = ocp.Checkpointer(ocp.PyTreeCheckpointHandler(use_ocdbt=True))
     if args.checkpoint is not None:
