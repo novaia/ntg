@@ -125,12 +125,12 @@ class ResidualBlock(nn.Module):
             self.num_features, kernel_size=(self.kernel_size, self.kernel_size), 
             dtype=self.dtype, param_dtype=self.param_dtype
         )(x)
+        x = nn.GroupNorm(self.num_groups, dtype=self.dtype, param_dtype=self.param_dtype)(x)
         x = self.activation_fn(x)
         x = nn.Conv(
             self.num_features, kernel_size=(self.kernel_size, self.kernel_size), 
             dtype=self.dtype, param_dtype=self.param_dtype
         )(x)
-        x = nn.GroupNorm(self.num_groups, dtype=self.dtype, param_dtype=self.param_dtype)(x)
         x = self.activation_fn(x)
         x = x + residual
         return x
