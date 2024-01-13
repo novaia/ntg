@@ -368,7 +368,6 @@ def main():
     noise_clip = config['noise_clip']
     sample_fn = partial(
         sample_implicit,
-        state=state, 
         num_images=16,
         diffusion_steps=20,
         diffusion_schedule=diffusion_schedule,
@@ -406,8 +405,8 @@ def main():
         if (epoch+1) % args.epochs_between_previews != 0:
             continue
 
-        fixed_seed_samples = sample_fn(seed=0)
-        dynamic_seed_samples = sample_fn(seed=state.step)
+        fixed_seed_samples = sample_fn(state=state, seed=0)
+        dynamic_seed_samples = sample_fn(state=state, seed=state.step)
         save_samples(fixed_seed_samples, state.step, fixed_seed_save_dir)
         save_samples(dynamic_seed_samples, state.step, dynamic_seed_save_dir)
 
