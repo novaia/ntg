@@ -8,6 +8,7 @@
     "output_channels": 1,
     "activation_fn": "silu",
     "weight_decay": 0.01,
+    "optimizer": "adamw",
     "adam_b1": 0.9,
     "adam_b2": 0.95,
     "adam_eps": 0.00000001,

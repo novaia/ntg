@@ -346,14 +346,7 @@ def main():
         staircase=False,
         end_value=config['lr_min']
     )
-    tx = optax.adamw(
-        learning_rate=lr_schedule,
-        b1=config['adam_b1'],
-        b2=config['adam_b2'],
-        eps=config['adam_eps'],
-        eps_root=config['adam_eps_root'],
-        weight_decay=config['weight_decay']
-    )
+    tx = config_utils.load_optimizer(config=config, learning_rate=lr_schedule)
     state = TrainState.create(apply_fn=model.apply, params=params, tx=tx)
     
     param_count = sum(x.size for x in jax.tree_util.tree_leaves(state.params))
