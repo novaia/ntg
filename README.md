@@ -37,11 +37,6 @@ Full list of parameters:
 ## Models
 - [Terra](./models/terra.py): a purely convolutional diffusion model.
 
-## Converting TF SavedModel to ONNX
-```
-python3.9 -m tf2onnx.convert --saved-model <PATH_TO_SAVED_MODEL> --output <PATH_TO_OUTPUT_MODEL>.onnx
-```
-
 ## Container Environment
 Starting the container:
 ```
