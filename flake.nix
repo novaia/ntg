@@ -2,7 +2,7 @@
     description = "Generative neural networks for 3D terrain";
 
     inputs = {
-        nixpkgs.url = "github:nixos/nixpkgs?ref=nixos-unstable";
+        nixpkgs.url = "github:nixos/nixpkgs/23.11";
         flake-utils.url = "github:numtide/flake-utils";
     };
     outputs = inputs@{ self, nixpkgs, flake-utils, ... }:
@@ -16,17 +16,22 @@
         };
     in {
         devShells = let
-            pyVer = "311";
+            pyVer = "310";
             py = "python${pyVer}";
             overlays = [
                 (final: prev: {
                     ${py} = prev.${py}.override {
-                        packageOverrides = final2: prev2: {
-                            jaxlib = prev2.jaxlib.overrideAttrs (oldAttrs: {
-                                #fetchAttrs = oldAttrs.fetchAttrs // {
-                                #    sha256.x86_64-linux = "sha256-h4zE+Z6z7odg7Avr54pgsjInBaHf+BqVQUi4SsV3Nqo=";
-                                #};
-                                sha256.x86_64-linux = "sha256-h4zE+Z6z7odg7Avr54pgsjInBaHf+BqVQUi4SsV3Nqo=";
+                        packageOverrides = finalPkgs: prevPkgs: {
+                            jax = prevPkgs.jax.overridePythonAttrs (o: { 
+                                pythonImportsCheck = [];
+                                nativeCheckInputs = with prevPkgs; [
+                                    #jaxlib'
+                                    matplotlib
+                                    pytestCheckHook
+                                    pytest-xdist
+                                ];
+                                pytestFlagsArray = [];
+                                doCheck = false;
                             });
                         };
                     };
@@ -47,6 +52,7 @@
                         jax
                         jaxlib-bin
                     ]))
+                    cudaPkgs.cudatoolkit
                 ];
             };
         };
