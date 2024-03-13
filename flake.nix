@@ -51,6 +51,9 @@
                         jax
                         jaxlib-bin
                         flax
+                        pyarrow
+                        pillow
+                        pandas
                     ]))
                     unstableCudaPkgs.cudaPackages.cudatoolkit
                     unstableCudaPkgs.cudaPackages.cuda_cudart
