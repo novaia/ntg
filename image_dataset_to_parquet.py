@@ -27,6 +27,8 @@ def save_table(image_data, table_number):
                 'info': {
                     'features': {
                         'heightmap': {'_type': 'Image'},
+                        'latitude': {'_type': 'Value', 'dtype': 'string'},
+                        'longitude': {'_type': 'Value', 'dtype': 'string'}
                     }
                 }
             }).encode('utf-8')
