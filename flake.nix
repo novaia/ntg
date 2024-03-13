@@ -16,13 +16,6 @@
                     ${py} = prev.${py}.override {
                         packageOverrides = finalPkgs: prevPkgs: {
                             jax = prevPkgs.jax.overridePythonAttrs (o: {
-                                # Replace jaxlib' with jaxlib-bin in nativeCheckInputs so that jaxlib is never used.
-                                #nativeCheckInputs = with prevPkgs; [
-                                #    jaxlib-bin
-                                #    matplotlib
-                                #    pytestCheckHook
-                                #    pytest-xdist
-                                #];
                                 nativeCheckInputs = [];
                                 pythonImportsCheck = [];
                                 pytestFlagsArray = [];
