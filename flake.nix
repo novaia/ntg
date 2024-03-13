@@ -7,18 +7,9 @@
         flake-utils.url = "github:numtide/flake-utils";
     };
     outputs = inputs@{ self, nixpkgs, nixpkgs-unstable, flake-utils, ... }:
-    flake-utils.lib.eachSystem [ "x86_64-linux" ] (system: let
-        inherit (nixpkgs) lib;
-        unstableCudaPkgs = import nixpkgs-unstable {
-            inherit system;
-            config = {
-                allowUnfree = true;
-                cudaSupport = true;
-            };
-        };
-    in {
+    flake-utils.lib.eachSystem [ "x86_64-linux" ] (system: {
         devShells = let
-            pyVer = "310";
+            pyVer = "311";
             py = "python${pyVer}";
             overlays = [
                 (final: prev: {
@@ -35,13 +26,14 @@
                                 nativeCheckInputs = [];
                                 pythonImportsCheck = [];
                                 pytestFlagsArray = [];
+                                passthru.tests = [];
                                 doCheck = false;
                             });
                         };
                     };
                 })
             ];
-            stableJaxPkgs = import nixpkgs {
+            unstableCudaPkgs = import nixpkgs-unstable {
                 inherit system overlays;
                 config = {
                     allowUnfree = true;
@@ -49,10 +41,10 @@
                 };
             };
         in rec {
-            default = stableJaxPkgs.mkShell {
+            default = unstableCudaPkgs.mkShell {
                 name = "cuda";
                 buildInputs = [
-                    (stableJaxPkgs.${py}.withPackages (pyp: with pyp; [
+                    (unstableCudaPkgs.${py}.withPackages (pyp: with pyp; [
                         jax
                         jaxlib-bin
                     ]))
