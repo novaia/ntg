@@ -57,8 +57,13 @@
                         jaxlib-bin
                     ]))
                     unstableCudaPkgs.cudaPackages.cudatoolkit
+                    unstableCudaPkgs.cudaPackages.cuda_cudart
+                    unstableCudaPkgs.cudaPackages.cudnn
+                    unstableCudaPkgs.linuxPackages.nvidia_x11
                 ];
                 shellHook = ''
+                    export CUDA_PATH=${unstableCudaPkgs.cudatoolkit}
+                    export EXTRA_LDFLAGS="-L/lib -L${unstableCudaPkgs.linuxPackages.nvidia_x11}/lib"
                     export LD_LIBRARY_PATH=/run/opengl-driver/lib/
                 '';
             };
