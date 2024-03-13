@@ -3,16 +3,18 @@
 
     inputs = {
         nixpkgs.url = "github:nixos/nixpkgs/23.11";
+        nixpkgs-unstable.url = "github:nixos/nixpkgs/nixpkgs-unstable";
         flake-utils.url = "github:numtide/flake-utils";
     };
-    outputs = inputs@{ self, nixpkgs, flake-utils, ... }:
+    outputs = inputs@{ self, nixpkgs, nixpkgs-unstable, flake-utils, ... }:
     flake-utils.lib.eachSystem [ "x86_64-linux" ] (system: let
         inherit (nixpkgs) lib;
-        basePkgs = import nixpkgs {
+        unstableCudaPkgs = import nixpkgs-unstable {
             inherit system;
-            overlays = [
-                self.overlays.default
-            ];
+            config = {
+                allowUnfree = true;
+                cudaSupport = true;
+            };
         };
     in {
         devShells = let
@@ -22,14 +24,16 @@
                 (final: prev: {
                     ${py} = prev.${py}.override {
                         packageOverrides = finalPkgs: prevPkgs: {
-                            jax = prevPkgs.jax.overridePythonAttrs (o: { 
+                            jax = prevPkgs.jax.overridePythonAttrs (o: {
+                                # Replace jaxlib' with jaxlib-bin in nativeCheckInputs so that jaxlib is never used.
+                                #nativeCheckInputs = with prevPkgs; [
+                                #    jaxlib-bin
+                                #    matplotlib
+                                #    pytestCheckHook
+                                #    pytest-xdist
+                                #];
+                                nativeCheckInputs = [];
                                 pythonImportsCheck = [];
-                                nativeCheckInputs = with prevPkgs; [
-                                    #jaxlib'
-                                    matplotlib
-                                    pytestCheckHook
-                                    pytest-xdist
-                                ];
                                 pytestFlagsArray = [];
                                 doCheck = false;
                             });
@@ -37,7 +41,7 @@
                     };
                 })
             ];
-            cudaPkgs = import nixpkgs {
+            stableJaxPkgs = import nixpkgs {
                 inherit system overlays;
                 config = {
                     allowUnfree = true;
@@ -45,15 +49,18 @@
                 };
             };
         in rec {
-            default = cudaPkgs.mkShell {
+            default = stableJaxPkgs.mkShell {
                 name = "cuda";
                 buildInputs = [
-                    (cudaPkgs.${py}.withPackages (pyp: with pyp; [
+                    (stableJaxPkgs.${py}.withPackages (pyp: with pyp; [
                         jax
                         jaxlib-bin
                     ]))
-                    cudaPkgs.cudatoolkit
+                    unstableCudaPkgs.cudaPackages.cudatoolkit
                 ];
+                shellHook = ''
+                    export LD_LIBRARY_PATH=/run/opengl-driver/lib/
+                '';
             };
         };
     });
