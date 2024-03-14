@@ -54,6 +54,7 @@
                         pyarrow
                         pillow
                         pandas
+                        datasets
                     ]))
                     unstableCudaPkgs.cudaPackages.cudatoolkit
                     unstableCudaPkgs.cudaPackages.cuda_cudart
