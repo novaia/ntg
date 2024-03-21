@@ -30,7 +30,7 @@ def save_samples(samples:jax.Array, step:int, save_dir:str):
         image = Image.fromarray(samples[i].squeeze(axis=-1))
         image.save(os.path.join(save_dir, f'step{step}_image{i}.png'))
 
-def get_data_iterator(dataset_path, batch_size):
+def get_dataset(dataset_path, batch_size):
     if dataset_path.endswith('/'):
         glob_pattern = f'{dataset_path}*.parquet'
     else:
@@ -46,8 +46,7 @@ def get_data_iterator(dataset_path, batch_size):
     )
     steps_per_epoch = len(dataset) // batch_size
     dataset = dataset.with_format('jax')
-    dataset_iterator = dataset.iter(batch_size=batch_size)
-    return dataset_iterator, steps_per_epoch
+    return dataset, steps_per_epoch
 
 class SinusoidalEmbedding(nn.Module):
     embedding_dim:int
@@ -267,7 +266,7 @@ def main():
         'len(num_features) must equal len(num_groups).'
     )
     
-    data_iterator, steps_per_epoch = get_data_iterator(
+    dataset, steps_per_epoch = get_dataset(
         dataset_path=args.dataset,
         batch_size=config['batch_size']
     )
@@ -351,6 +350,8 @@ def main():
     steps_since_last_loss_report = 0
     accumulated_losses = []
     for epoch in range(config['epochs']):
+        dataset.shuffle(seed=epoch)
+        data_iterator = dataset.iter(batch_size=config['batch_size'])
         epoch_start_time = datetime.now()
         for _ in range(steps_per_epoch):
             images = jnp.expand_dims(next(data_iterator)['heightmap'], axis=-1)
