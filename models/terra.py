@@ -325,9 +325,9 @@ def main():
     if args.checkpoint is not None:
         state = checkpointer.restore(args.checkpoint, item=state)
 
-    #if args.wandb == 1:
-    #    import wandb
-    #    wandb.init(project='ntg-terra', config=config)
+    if args.wandb == 1:
+        import wandb
+        wandb.init(project='ntg-terra', config=config)
     min_signal_rate = config['min_signal_rate']
     max_signal_rate = config['max_signal_rate']
     noise_clip = config['noise_clip']

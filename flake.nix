@@ -32,6 +32,11 @@
                                 pytestFlagsArray = [];
                                 doCheck = false;
                             });
+                            wandb = prevPkgs.wandb.overridePythonAttrs(o: {
+                                nativeCheckInputs = [];
+                                pythonIMportsCheck = [];
+                                doCheck = false;
+                            });
                         };
                     };
                 })
@@ -55,6 +60,7 @@
                         pillow
                         pandas
                         datasets
+                        wandb
                     ]))
                     unstableCudaPkgs.cudaPackages.cudatoolkit
                     unstableCudaPkgs.cudaPackages.cuda_cudart
