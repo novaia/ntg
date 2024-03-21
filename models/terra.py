@@ -344,6 +344,9 @@ def main():
         noise_clip=noise_clip,
     )
 
+    steps_between_loss_report = 300
+    steps_since_last_loss_report = 0
+    accumulated_losses = []
     for epoch in range(config['epochs']):
         epoch_start_time = datetime.now()
         for _ in range(steps_per_epoch):
@@ -353,11 +356,17 @@ def main():
             loss, state = train_step(
                 state, images, min_signal_rate, max_signal_rate, noise_clip, step_key
             )
-            if args.wandb == 1: 
-                if state.step % args.steps_between_wandb_logs == 0:
-                    wandb.log({'loss': loss}, step=state.step)
-            else:
-                print(state.step, loss)
+            accumulated_losses.append(loss)
+            steps_since_last_loss_report += 1
+            if steps_since_last_loss_report >= steps_between_loss_report:
+                average_loss = sum(accumulated_losses) / len(accumulated_losses)
+                if args.wandb == 1: 
+                    if state.step % args.steps_between_wandb_logs == 0:
+                        wandb.log({'loss': average_loss}, step=state.step)
+                else:
+                    print(state.step, average_loss)
+                steps_since_last_loss_report = 0
+                accumulated_losses = []
         epoch_end_time = datetime.now()
         print(
             f'Epoch {epoch} completed in {epoch_end_time-epoch_start_time} at {epoch_end_time}'
