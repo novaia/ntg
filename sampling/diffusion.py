@@ -15,7 +15,6 @@ def implicit(
     channels:int,
     min_signal_rate:float,
     max_signal_rate:float,
-    noise_clip:float,
     seed:int, 
 ):
     @jax.jit
@@ -28,7 +27,6 @@ def implicit(
         jax.random.PRNGKey(seed), 
         shape=(num_images, image_height, image_width, channels)
     )
-    initial_noise = jnp.clip(initial_noise, -noise_clip, noise_clip)
     step_size = 1.0 / diffusion_steps
     
     next_noisy_images = initial_noise
