@@ -8,10 +8,6 @@ import optax
 
 import glob
 from datasets import load_dataset, Dataset
-#from nvidia.dali import pipeline_def, fn
-#from nvidia.dali.plugin.jax import DALIGenericIterator
-#from nvidia.dali.plugin.base_iterator import LastBatchPolicy
-#from nvidia.dali import types as dali_types
 
 from PIL import Image
 import pandas as pd
@@ -35,9 +31,16 @@ def save_samples(samples:jax.Array, step:int, save_dir:str):
         image.save(os.path.join(save_dir, f'step{step}_image{i}.png'))
 
 def get_data_iterator(dataset_path, batch_size):
+    if dataset_path.endswith('/'):
+        glob_pattern = f'{dataset_path}*.parquet'
+    else:
+        glob_pattern = f'{dataset_path}/*.parquet'
+    parquet_files = glob.glob(glob_pattern)
+    assert len(parquet_files) > 0, 'No parquet files were found in dataset directory.'
+    print(f'Found {len(parquet_files)} parquet files in dataset directory.')
     dataset = load_dataset(
         'parquet', 
-        data_files={'train': glob.glob('data/world-heightmaps-256-parquet/*.parquet')},
+        data_files={'train': parquet_files},
         split='train',
         num_proc=8
     )
@@ -45,55 +48,6 @@ def get_data_iterator(dataset_path, batch_size):
     dataset = dataset.with_format('jax')
     dataset_iterator = dataset.iter(batch_size=batch_size)
     return dataset_iterator, steps_per_epoch
-
-'''
-def get_data_iterator(
-    dataset_path:str, image_height:int, image_width:int, batch_size:int, num_threads:int = 3
-):
-    @pipeline_def
-    def my_pipeline_def(files, image_height, image_width, file_root):
-        image_files = fn.readers.file(
-            files=files, 
-            file_root=file_root, 
-            read_ahead=True, 
-            shuffle_after_epoch=True, 
-            device='cpu'
-        )[0]
-        images = fn.decoders.image(
-            image_files, 
-            device='mixed', 
-            output_type=dali_types.GRAY, 
-            preallocate_height_hint=image_height,
-            preallocate_width_hint=image_width
-        )
-        flipped = fn.flip(
-            images, 
-            vertical=fn.random.coin_flip(device='cpu'), 
-            horizontal=fn.random.coin_flip(device='cpu'), 
-            device='gpu'
-        )
-        casted = fn.cast(flipped, dtype=dali_types.FLOAT)
-        scale_constant = dali_types.Constant(127.5).float32()
-        shift_constant = dali_types.Constant(1.0).float32()
-        normalized = (casted / scale_constant) - shift_constant
-        return normalized
-    
-    file_names = list(pd.read_csv(os.path.join(dataset_path, 'metadata.csv'))['file_name'])
-    steps_per_epoch = len(file_names) // batch_size
-    data_pipeline = my_pipeline_def(
-        files=file_names,
-        file_root=dataset_path,
-        image_height=image_height,
-        image_width=image_width,
-        batch_size=batch_size, 
-        num_threads=num_threads, 
-        device_id=0
-    )
-    data_iterator = DALIGenericIterator(
-        pipelines=[data_pipeline], output_map=['x'], last_batch_policy=LastBatchPolicy.DROP
-    )
-    return data_iterator, steps_per_epoch
-'''
 
 class SinusoidalEmbedding(nn.Module):
     embedding_dim:int
@@ -312,17 +266,11 @@ def main():
         'len(num_features) must equal len(num_groups).'
     )
     
-    #data_iterator, steps_per_epoch = get_data_iterator(
-    #    dataset_path=args.dataset, 
-    #    image_height=config['image_size'],
-    #    image_width=config['image_size'],
-    #    batch_size=config['batch_size']
-    #)
     data_iterator, steps_per_epoch = get_data_iterator(
         dataset_path=args.dataset,
         batch_size=config['batch_size']
     )
-    print('Steps per epoch', steps_per_epoch)
+    print('Steps per epoch:', steps_per_epoch)
 
     activation_fn = config_utils.load_activation_fn(config['activation_fn'])
     dtype = config_utils.load_dtype(config['dtype'])
@@ -371,7 +319,7 @@ def main():
     
     param_count = sum(x.size for x in jax.tree_util.tree_leaves(state.params))
     config['param_count'] = param_count
-    print('Param count', param_count)
+    print('Param count:', param_count)
 
     checkpointer = ocp.Checkpointer(ocp.PyTreeCheckpointHandler(use_ocdbt=True))
     if args.checkpoint is not None:
