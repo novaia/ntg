@@ -365,7 +365,7 @@ def main():
 
         if args.save_checkpoints == 1:
             checkpointer.save(
-                os.path.join('/project/', checkpoint_save_dir, f'step{state.step}'), 
+                (os.path.join(os.path.abspath(checkpoint_save_dir), f'step{state.step}')), 
                 state, force=True
             )
         if (epoch+1) % args.epochs_between_previews != 0:
