@@ -224,11 +224,12 @@ def diffusion_schedule(diffusion_times, min_signal_rate, max_signal_rate):
     noise_rates = jnp.sin(diffusion_angles)
     return noise_rates, signal_rates
 
-@partial(jax.jit, static_argnames=['min_signal_rate', 'max_signal_rate', 'noise_clip'])
-def train_step(state, images, min_signal_rate, max_signal_rate, noise_clip, key):
+@partial(jax.jit, static_argnames=['min_signal_rate', 'max_signal_rate'])
+def train_step(state, images, min_signal_rate, max_signal_rate):
+    key = jax.random.PRNGKey(state.step)
+    images = (images / 127.5) - 1.0
     noise_key, diffusion_time_key = jax.random.split(key, 2)
     noises = jax.random.normal(noise_key, images.shape, dtype=jnp.float32)
-    noises = jnp.clip(noises, -noise_clip, noise_clip)
     diffusion_times = jax.random.uniform(diffusion_time_key, (images.shape[0], 1, 1, 1))
     noise_rates, signal_rates = diffusion_schedule(
         diffusion_times, min_signal_rate, max_signal_rate
@@ -314,7 +315,11 @@ def main():
         staircase=False,
         end_value=config['lr_min']
     )
-    tx = config_utils.load_optimizer(config=config, learning_rate=lr_schedule)
+    tx = optax.chain(
+        optax.zero_nans(),
+        optax.adaptive_grad_clip(clipping=config['adaptive_grad_clip']),
+        config_utils.load_optimizer(config=config, learning_rate=lr_schedule)
+    )
     state = TrainState.create(apply_fn=model.apply, params=params, tx=tx)
     
     param_count = sum(x.size for x in jax.tree_util.tree_leaves(state.params))
@@ -330,7 +335,6 @@ def main():
         wandb.init(project='ntg-terra', config=config)
     min_signal_rate = config['min_signal_rate']
     max_signal_rate = config['max_signal_rate']
-    noise_clip = config['noise_clip']
     sample_fn = partial(
         sample_implicit,
         num_images=16,
@@ -341,7 +345,6 @@ def main():
         channels=config['output_channels'],
         min_signal_rate=min_signal_rate,
         max_signal_rate=max_signal_rate,
-        noise_clip=noise_clip,
     )
 
     steps_between_loss_report = 300
@@ -351,11 +354,7 @@ def main():
         epoch_start_time = datetime.now()
         for _ in range(steps_per_epoch):
             images = jnp.expand_dims(next(data_iterator)['heightmap'], axis=-1)
-            images = (images / 127.5) - 1.0
-            step_key = jax.random.PRNGKey(state.step)
-            loss, state = train_step(
-                state, images, min_signal_rate, max_signal_rate, noise_clip, step_key
-            )
+            loss, state = train_step(state, images, min_signal_rate, max_signal_rate)
             accumulated_losses.append(loss)
             steps_since_last_loss_report += 1
             if steps_since_last_loss_report >= steps_between_loss_report:

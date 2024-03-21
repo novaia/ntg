@@ -10,11 +10,11 @@
     "weight_decay": 0.0001,
     "optimizer": "adamw",
     "adam_b1": 0.9,
-    "adam_b2": 0.9,
+    "adam_b2": 0.99,
     "adam_eps": 0.00000001,
     "adam_eps_root": 0.0,
-    "lr_base": 0.0001,
-    "lr_max": 0.01,
+    "lr_base": 0.00001,
+    "lr_max": 0.0001,
     "lr_min": 0.00001,
     "lr_warmup_epochs": 2,
     "lr_decay_rate": 0.8,
@@ -24,7 +24,7 @@
     "min_signal_rate": 0.01,
     "max_signal_rate": 0.99,
     "batch_size": 16,
-    "noise_clip": 3.0,
+    "adaptive_grad_clip": 2.0,
     "dtype": "bfloat16",
     "param_dtype": "float32"
 }
