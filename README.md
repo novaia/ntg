@@ -37,18 +37,15 @@ Full list of parameters:
 ## Models
 - [Terra](./models/terra.py): a purely convolutional diffusion model.
 
-## Container Environment
-Starting the container:
+## Development Environment
+The NTG development environment is managed with Nix. You can follow the steps below to get started.
+1. Install Nix with the [official installer](https://nixos.org/download/) or the [determinate installer](https://github.com/DeterminateSystems/nix-installer).
+2. Enable the experimental Nix Flakes feature by adding the following line to ``~/.config/nix/nix.conf`` or ``/etc/nix/nix.conf`` 
+(this step can be skipped if you installed nix with the [determinate installer](https://github.com/DeterminateSystems/nix-installer)).
 ```
-docker-compose up -d
+experimental-features = nix-command flakes
 ```
-
-Opening a shell in the container:
+3. Run the following command to open a development shell with all the dependencies installed.
 ```
-docker-compose exec ntg bash
-```
-
-Stopping the container:
-```
-docker-compose down
+nix develop
 ```
