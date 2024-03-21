@@ -1,6 +1,7 @@
 import jax
 from jax import numpy as jnp
 import numpy as np
+from flax import struct
 from flax import linen as nn
 from flax.training.train_state import TrainState
 from orbax import checkpoint as ocp
@@ -15,6 +16,7 @@ import pandas as pd
 from typing import Any, Callable, List
 from functools import partial
 from datetime import datetime
+from copy import deepcopy
 import json
 import math
 import os
@@ -214,6 +216,24 @@ class Terra(nn.Module):
         )(x)
         return x
 
+class EmaTrainState(TrainState):
+    ema_warmup: int = struct.field(pytree_node=False)
+    ema_decay: float = struct.field(pytree_node=False)
+    ema_params: dict = struct.field(pytree_node=True)
+    
+    def update_ema(self):
+        def true_fn(state):
+            def _update_ema(ema_param, base_param):
+                return state.ema_decay * ema_param + (1 - state.ema_decay) * base_param
+
+            new_ema_params = jax.tree_map(_update_ema, state.ema_params, state.params)
+            return state.replace(ema_params=new_ema_params)
+
+        def false_fn(state):
+            return state.replace(ema_params=self.params)
+
+        return jax.lax.cond(self.step <= self.ema_warmup, false_fn, true_fn, self)
+
 def diffusion_schedule(diffusion_times, min_signal_rate, max_signal_rate):
     start_angle = jnp.arccos(max_signal_rate)
     end_angle = jnp.arccos(min_signal_rate)
@@ -241,7 +261,7 @@ def train_step(state, images, min_signal_rate, max_signal_rate):
 
     grad_fn = jax.value_and_grad(loss_fn)
     loss, grads = grad_fn(state.params)
-    state = state.apply_gradients(grads=grads)
+    state = state.apply_gradients(grads=grads).update_ema()
     return loss, state
 
 def main():
@@ -270,7 +290,7 @@ def main():
         dataset_path=args.dataset,
         batch_size=config['batch_size']
     )
-    print('Steps per epoch:', steps_per_epoch)
+    print(f'Steps per epoch: {steps_per_epoch:,}')
 
     activation_fn = config_utils.load_activation_fn(config['activation_fn'])
     dtype = config_utils.load_dtype(config['dtype'])
@@ -319,11 +339,15 @@ def main():
         optax.adaptive_grad_clip(clipping=config['adaptive_grad_clip']),
         config_utils.load_optimizer(config=config, learning_rate=lr_schedule)
     )
-    state = TrainState.create(apply_fn=model.apply, params=params, tx=tx)
-    
+    state = EmaTrainState.create(
+        apply_fn=model.apply, params=params, tx=tx, 
+        ema_warmup=config['ema_warmup'], ema_decay=config['ema_decay'], 
+        ema_params=deepcopy(params)
+    )
+
     param_count = sum(x.size for x in jax.tree_util.tree_leaves(state.params))
     config['param_count'] = param_count
-    print('Param count:', param_count)
+    print(f'Param count: {param_count:,}')
 
     checkpointer = ocp.Checkpointer(ocp.PyTreeCheckpointHandler(use_ocdbt=True))
     if args.checkpoint is not None:
@@ -380,8 +404,8 @@ def main():
         if (epoch+1) % args.epochs_between_previews != 0:
             continue
 
-        fixed_seed_samples = sample_fn(state=state, seed=0)
-        dynamic_seed_samples = sample_fn(state=state, seed=state.step)
+        fixed_seed_samples = sample_fn(apply_fn=state.apply_fn, params=state.ema_params, seed=0)
+        dynamic_seed_samples = sample_fn(apply_fn=state.apply_fn, params=state.ema_params, seed=state.step)
         save_samples(fixed_seed_samples, state.step, fixed_seed_save_dir)
         save_samples(dynamic_seed_samples, state.step, dynamic_seed_save_dir)
 

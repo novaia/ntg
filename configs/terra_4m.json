@@ -25,6 +25,8 @@
     "max_signal_rate": 0.99,
     "batch_size": 16,
     "adaptive_grad_clip": 2.0,
+    "ema_decay": 0.999,
+    "ema_warmup": 300,
     "dtype": "bfloat16",
     "param_dtype": "float32"
 }
