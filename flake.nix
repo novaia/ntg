@@ -72,7 +72,6 @@
                     unstableCudaPkgs.cudaPackages.cudatoolkit
                     unstableCudaPkgs.cudaPackages.cuda_cudart
                     unstableCudaPkgs.cudaPackages.cudnn
-                    #unstableCudaPkgs.linuxPackages.nvidia_x11
                 ];
                 shellHook = ''
                     source <(sed -Ee '/\$@/d' ${lib.getExe unstableCudaPkgs.nixgl.nixGLIntel})
