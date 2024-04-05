@@ -5,13 +5,19 @@
         nixpkgs.url = "github:nixos/nixpkgs/23.11";
         nixpkgs-unstable.url = "github:nixos/nixpkgs/nixpkgs-unstable";
         flake-utils.url = "github:numtide/flake-utils";
+        nixgl.url = "github:nix-community/nixGL";
+        # nixgl with buildinputs fix
+        #nixgl.url = "github:kenranunderscore/nixGL";
     };
-    outputs = inputs@{ self, nixpkgs, nixpkgs-unstable, flake-utils, ... }:
-    flake-utils.lib.eachSystem [ "x86_64-linux" ] (system: {
+    outputs = inputs@{ self, nixpkgs, nixpkgs-unstable, flake-utils, nixgl, ... }:
+    flake-utils.lib.eachSystem [ "x86_64-linux" ] (system: let
+        inherit (nixpkgs-unstable) lib;
+    in {
         devShells = let
             pyVer = "311";
             py = "python${pyVer}";
             overlays = [
+                nixgl.overlay
                 (final: prev: {
                     ${py} = prev.${py}.override {
                         packageOverrides = finalPkgs: prevPkgs: {
@@ -65,12 +71,11 @@
                     unstableCudaPkgs.cudaPackages.cudatoolkit
                     unstableCudaPkgs.cudaPackages.cuda_cudart
                     unstableCudaPkgs.cudaPackages.cudnn
-                    unstableCudaPkgs.linuxPackages.nvidia_x11
+                    #unstableCudaPkgs.linuxPackages.nvidia_x11
                 ];
                 shellHook = ''
-                    export CUDA_PATH=${unstableCudaPkgs.cudatoolkit}
-                    export EXTRA_LDFLAGS="-L/lib -L${unstableCudaPkgs.linuxPackages.nvidia_x11}/lib"
-                    export LD_LIBRARY_PATH=/run/opengl-driver/lib/
+                    source <(sed -Ee '/\$@/d' ${lib.getExe unstableCudaPkgs.nixgl.nixGLIntel})
+                    source <(sed -Ee '/\$@/d' ${lib.getExe unstableCudaPkgs.nixgl.auto.nixGLNvidia}*)
                 '';
             };
         };
