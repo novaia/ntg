@@ -5,9 +5,10 @@
         nixpkgs.url = "github:nixos/nixpkgs/23.11";
         nixpkgs-unstable.url = "github:nixos/nixpkgs/nixpkgs-unstable";
         flake-utils.url = "github:numtide/flake-utils";
-        nixgl.url = "github:nix-community/nixGL";
-        # nixgl with buildinputs fix
-        #nixgl.url = "github:kenranunderscore/nixGL";
+        # Patched version of nixGL from kenrandunderscore.
+        # PR: https://github.com/nix-community/nixGL/pull/165
+        # TODO: switch back to github:nix-community/nixGL when PR is merged.
+        nixgl.url = "github:hayden-donnelly/nixGL";
     };
     outputs = inputs@{ self, nixpkgs, nixpkgs-unstable, flake-utils, nixgl, ... }:
     flake-utils.lib.eachSystem [ "x86_64-linux" ] (system: let

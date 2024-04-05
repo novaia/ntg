@@ -41,13 +41,13 @@
       "locked": {
         "lastModified": 1710942276,
         "narHash": "sha256-+K0UtpWhsA5X0kZpN2eaBI6TP2OvrQAWFvtoeICWmhM=",
-        "owner": "kenranunderscore",
+        "owner": "hayden-donnelly",
         "repo": "nixGL",
         "rev": "c58137326ef0bac8a504111591692ad849f49029",
         "type": "github"
       },
       "original": {
-        "owner": "kenranunderscore",
+        "owner": "hayden-donnelly",
         "repo": "nixGL",
         "type": "github"
       }
