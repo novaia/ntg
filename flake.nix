@@ -68,6 +68,8 @@
                         pandas
                         datasets
                         wandb
+                        tifffile
+                        zarr
                     ]))
                     unstableCudaPkgs.cudaPackages.cudatoolkit
                     unstableCudaPkgs.cudaPackages.cuda_cudart
