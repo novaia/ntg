@@ -5,6 +5,7 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--input_path', type=str, required=True)
     parser.add_argument('--output_path', type=str, required=True)
+    parser.add_argument('--temp_tif', type=str, required=True)
     args = parser.parse_args()
 
     if not os.path.exists(args.output_path):
@@ -12,18 +13,16 @@ def main():
 
     input_paths = glob.glob(f'{args.input_path}/*/*.tif')
     #input_paths = os.listdir(args.input_path)
-    for path in input_paths:
-        temp_tif = 'data/temp.tif'
-        input_tif = os.path.join(args.input_path, path)
-        fillnodata_cmd = f'gdal_fillnodata.py -of GTiff -md 100 {input_tif} {temp_tif}'
+    for input_tif in input_paths:
+        print(input_tif)
+        fillnodata_cmd = f'gdal_fillnodata.py -of GTiff -md 100 {input_tif} {args.temp_tif}'
         os.system(fillnodata_cmd)
         
-        output_png = os.path.join(args.output_path, f'{path[:-4]}_2.png')
-        translate_cmd = f'gdal_translate -of PNG -scale {temp_tif} {output_png}'
+        output_png = os.path.join(args.output_path, f'{os.path.basename(input_tif)[:-4]}_2.png')
+        translate_cmd = f'gdal_translate -of PNG -scale {args.temp_tif} {output_png}'
         os.system(translate_cmd)
 
-    os.remove(temp_tif)
-
+    os.remove(args.temp_tif)
 
 if __name__ == '__main__':
     main()
