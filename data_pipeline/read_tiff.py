@@ -1,4 +1,4 @@
-import os, argparse
+import os, argparse, glob
 
 def main():
     os.environ['GDAL_PAM_ENABLED'] = 'NO'
@@ -10,7 +10,8 @@ def main():
     if not os.path.exists(args.output_path):
         os.makedirs(args.output_path)
 
-    input_paths = os.listdir(args.input_path)
+    input_paths = glob.glob(f'{args.input_path}/*/*.tif')
+    #input_paths = os.listdir(args.input_path)
     for path in input_paths:
         temp_tif = 'data/temp.tif'
         input_tif = os.path.join(args.input_path, path)
